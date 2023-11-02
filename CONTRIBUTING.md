@@ -542,16 +542,11 @@ like the following is a useful way to check what has landed:
  $ git log --oneline v0.62.0..HEAD
  ```
 
-Also worth checking the [next-release tag](https://github.com/rust-lang/rust-bindgen/pulls?q=is%3Apr+label%3Anext-release).
-
-Once that's done and the changelog is up-to-date, run `doctoc` on it.
-
-If needed, install it locally by running:
-
-```
-$ npm install doctoc
-$ ./node_modules/doctoc/doctoc.js CHANGELOG.md
-```
+Also worth checking the [next-release
+tag](https://github.com/rust-lang/rust-bindgen/pulls?q=is%3Apr+label%3Anext-release).
+It is very important that you do not rename the `Unreleased` section of the
+changelog as this will be done automatically using `cargo release` on a further
+step.
 
 ### Merge to `main`
 
@@ -561,13 +556,21 @@ important fix) you can skip this.
 
 ### Tag and publish
 
-Once you're in the right branch, do:
+Once you're in `main`. Remember to install `doctoc` by running:
+```
+npm install doctoc
+```
 
+And then run:
 ```
-cargo release [patch|minor] --execute
+cargo release [patch|minor] --no-publish --execute
 ```
+
 This does the following:
 
+- Bump the version.
+- Turn the `Unreleased` section of the changelog into the section for the version being published.
+- Update the table of contents of the changelog using `doctoc`.
 - Tag (`git tag`) the HEAD commit
 - Publish (`cargo publish`) bindgen and bindgen-cli
 - Push (`git push`) to GitHub
@@ -601,5 +604,21 @@ when a new cargo-dist is available:
 cargo dist init # from "cargo install cargo-dist"
 cargo dist generate-ci # to update .github/workflows/release.yml
 ```
+
+### What to do if a Github release fails
+
+If the release process failed after you run `cargo release` you can manually
+delete the tag and release from Github. Also remember to delete the tag locally
+by running `git tag -d`. Once all the extra changes are in the `main` branch
+you can trigger a release by creating a new tag using `git tag` and push it
+using `git push --tag`.
+
+### Create a new crates.io release
+
+Go to [the Publish
+workflow](https://github.com/rust-lang/rust-bindgen/actions/workflows/publish.yml)
+and run a new workflow using the "Run Workflow" button.
+
+Remember that crates.io releases cannot be deleted!
 
 [prettyplease]: https://github.com/dtolnay/prettyplease
