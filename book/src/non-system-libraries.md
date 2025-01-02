@@ -14,15 +14,11 @@ int hello();
 
 Given that the library has not been compiled yet, we need to modify the
 `build.rs` build script to compile the `hello.c` source file into a static
-libary:
+library:
 
 ```rust,ignore
-extern crate bindgen;
-
 use std::env;
 use std::path::PathBuf;
-
-use bindgen::CargoCallbacks;
 
 fn main() {
     // This is the directory where the `c` library is located.
@@ -47,9 +43,6 @@ fn main() {
     // Tell cargo to tell rustc to link our `hello` library. Cargo will
     // automatically know it must look for a `libhello.a` file.
     println!("cargo:rustc-link-lib=hello");
-
-    // Tell cargo to invalidate the built crate whenever the header changes.
-    println!("cargo:rerun-if-changed={}", headers_path_str);
 
     // Run `clang` to compile the `hello.c` file into a `hello.o` object file.
     // Unwrap if it is not possible to spawn the process.
@@ -91,7 +84,7 @@ fn main() {
         .header(headers_path_str)
         // Tell cargo to invalidate the built crate whenever any of the
         // included header files changed.
-        .parse_callbacks(Box::new(CargoCallbacks))
+        .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
         // Finish the builder and generate the bindings.
         .generate()
         // Unwrap the Result and panic on failure.

@@ -1,10 +1,9 @@
 extern crate bindgen;
-extern crate cc;
 
 use bindgen::callbacks::{
     DeriveInfo, IntKind, MacroParsingBehavior, ParseCallbacks,
 };
-use bindgen::{Builder, CargoCallbacks, EnumVariation, Formatter};
+use bindgen::{Builder, EnumVariation, Formatter};
 use std::collections::HashSet;
 use std::env;
 use std::path::PathBuf;
@@ -99,7 +98,7 @@ impl ParseCallbacks for MacroCallback {
             _ => {
                 // The system might provide lots of functional macros.
                 // Ensure we did not miss handling one that we meant to handle.
-                assert!(!name.starts_with("TESTMACRO_"), "name = {}", name);
+                assert!(!name.starts_with("TESTMACRO_"), "name = {name}");
             }
         }
     }
@@ -128,6 +127,20 @@ impl ParseCallbacks for MacroCallback {
             vec!["PartialEq".into()]
         } else if info.name == "MyOrderedEnum" {
             vec!["std::cmp::PartialOrd".into()]
+        } else if info.name == "TestDeriveOnAlias" {
+            vec!["std::cmp::PartialEq".into(), "std::cmp::PartialOrd".into()]
+        } else {
+            vec![]
+        }
+    }
+
+    // Test the "custom attributes" capability.
+    fn add_attributes(
+        &self,
+        info: &bindgen::callbacks::AttributeInfo<'_>,
+    ) -> Vec<String> {
+        if info.name == "Test" {
+            vec!["#[cfg_attr(test, derive(PartialOrd))]".into()]
         } else {
             vec![]
         }
@@ -170,7 +183,7 @@ fn setup_macro_test() {
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
     let out_rust_file = out_path.join("test.rs");
     let out_rust_file_relative = out_rust_file
-        .strip_prefix(std::env::current_dir().unwrap().parent().unwrap())
+        .strip_prefix(env::current_dir().unwrap().parent().unwrap())
         .unwrap();
     let out_dep_file = out_path.join("test.d");
 
@@ -193,6 +206,7 @@ fn setup_macro_test() {
         .blocklist_function("my_prefixed_function_to_remove")
         .constified_enum("my_prefixed_enum_to_be_constified")
         .opaque_type("my_prefixed_templated_foo<my_prefixed_baz>")
+        .new_type_alias("TestDeriveOnAlias")
         .depfile(out_rust_file_relative.display().to_string(), &out_dep_file)
         .generate()
         .expect("Unable to generate bindings");
@@ -231,7 +245,9 @@ fn setup_wrap_static_fns_test() {
     // generate external bindings with the external .c and .h files
     let bindings = Builder::default()
         .header(input_header_file_path_str)
-        .parse_callbacks(Box::new(CargoCallbacks))
+        .parse_callbacks(Box::new(
+            bindgen::CargoCallbacks::new().rerun_on_header_files(true),
+        ))
         .parse_callbacks(Box::new(WrappedVaListCallback))
         .wrap_static_fns(true)
         .wrap_static_fns_path(
@@ -242,7 +258,7 @@ fn setup_wrap_static_fns_test() {
         .expect("Unable to generate bindings");
 
     println!("cargo:rustc-link-lib=static=wrap_static_fns"); // tell cargo to link libextern
-    println!("bindings generated: {}", bindings);
+    println!("bindings generated: {bindings}");
 
     let obj_path = out_path.join("wrap_static_fns.o");
     let lib_path = out_path.join("libwrap_static_fns.a");
@@ -279,7 +295,7 @@ fn setup_wrap_static_fns_test() {
 
     bindings
         .write_to_file(out_rust_file)
-        .expect("Cound not write bindings to the Rust file");
+        .expect("Could not write bindings to the Rust file");
 }
 
 fn main() {

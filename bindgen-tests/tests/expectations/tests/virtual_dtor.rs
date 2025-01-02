@@ -6,19 +6,11 @@ pub struct nsSlots__bindgen_vtable(::std::os::raw::c_void);
 pub struct nsSlots {
     pub vtable_: *const nsSlots__bindgen_vtable,
 }
-#[test]
-fn bindgen_test_layout_nsSlots() {
-    assert_eq!(
-        ::std::mem::size_of::<nsSlots>(),
-        8usize,
-        concat!("Size of: ", stringify!(nsSlots)),
-    );
-    assert_eq!(
-        ::std::mem::align_of::<nsSlots>(),
-        8usize,
-        concat!("Alignment of ", stringify!(nsSlots)),
-    );
-}
+#[allow(clippy::unnecessary_operation, clippy::identity_op)]
+const _: () = {
+    ["Size of nsSlots"][::std::mem::size_of::<nsSlots>() - 8usize];
+    ["Alignment of nsSlots"][::std::mem::align_of::<nsSlots>() - 8usize];
+};
 impl Default for nsSlots {
     fn default() -> Self {
         let mut s = ::std::mem::MaybeUninit::<Self>::uninit();
@@ -28,7 +20,7 @@ impl Default for nsSlots {
         }
     }
 }
-extern "C" {
+unsafe extern "C" {
     #[link_name = "\u{1}_ZN7nsSlotsD1Ev"]
     pub fn nsSlots_nsSlots_destructor(this: *mut nsSlots);
 }

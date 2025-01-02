@@ -1,7 +1,3 @@
-// Don't want to copy that nasty `cfg` below...
-#[allow(unused_extern_crates)]
-extern crate bindgen;
-
 /// A sanity test that we can generate bindings for Stylo.
 ///
 /// We don't assert on expected output because its just too big. The output will
@@ -19,8 +15,8 @@ extern crate bindgen;
     feature = "__testing_only_extra_assertions",
 )))]
 #[cfg(any(
-    feature = "__testing_only_libclang_5",
-    feature = "__testing_only_libclang_9"
+    feature = "__testing_only_libclang_9",
+    feature = "__testing_only_libclang_16"
 ))]
 fn sanity_check_can_generate_stylo_bindings() {
     use std::time::Instant;

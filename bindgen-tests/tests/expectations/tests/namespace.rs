@@ -3,7 +3,7 @@
 pub mod root {
     #[allow(unused_imports)]
     use self::super::root;
-    extern "C" {
+    unsafe extern "C" {
         #[link_name = "\u{1}_Z9top_levelv"]
         pub fn top_level();
     }
@@ -12,7 +12,7 @@ pub mod root {
         use self::super::super::root;
         pub type whatever_other_thing_t = whatever_int_t;
         pub type whatever_int_t = ::std::os::raw::c_int;
-        extern "C" {
+        unsafe extern "C" {
             #[link_name = "\u{1}_ZN8whatever11in_whateverEv"]
             pub fn in_whatever();
         }
@@ -25,35 +25,21 @@ pub mod root {
         pub struct A {
             pub b: root::whatever::whatever_int_t,
         }
-        #[test]
-        fn bindgen_test_layout_A() {
-            const UNINIT: ::std::mem::MaybeUninit<A> = ::std::mem::MaybeUninit::uninit();
-            let ptr = UNINIT.as_ptr();
-            assert_eq!(
-                ::std::mem::size_of::<A>(),
-                4usize,
-                concat!("Size of: ", stringify!(A)),
-            );
-            assert_eq!(
-                ::std::mem::align_of::<A>(),
-                4usize,
-                concat!("Alignment of ", stringify!(A)),
-            );
-            assert_eq!(
-                unsafe { ::std::ptr::addr_of!((*ptr).b) as usize - ptr as usize },
-                0usize,
-                concat!("Offset of field: ", stringify!(A), "::", stringify!(b)),
-            );
-        }
+        #[allow(clippy::unnecessary_operation, clippy::identity_op)]
+        const _: () = {
+            ["Size of A"][::std::mem::size_of::<A>() - 4usize];
+            ["Alignment of A"][::std::mem::align_of::<A>() - 4usize];
+            ["Offset of field: A::b"][::std::mem::offset_of!(A, b) - 0usize];
+        };
     }
     #[repr(C)]
     #[derive(Debug)]
     pub struct C<T> {
+        pub _phantom_0: ::std::marker::PhantomData<::std::cell::UnsafeCell<T>>,
         pub _base: root::_bindgen_mod_id_17::A,
         pub m_c: T,
         pub m_c_ptr: *mut T,
         pub m_c_arr: [T; 10usize],
-        pub _phantom_0: ::std::marker::PhantomData<::std::cell::UnsafeCell<T>>,
     }
     impl<T> Default for C<T> {
         fn default() -> Self {
@@ -71,8 +57,8 @@ pub mod root {
         #[repr(C)]
         #[derive(Debug)]
         pub struct D<T> {
-            pub m_c: root::C<T>,
             pub _phantom_0: ::std::marker::PhantomData<::std::cell::UnsafeCell<T>>,
+            pub m_c: root::C<T>,
         }
         impl<T> Default for D<T> {
             fn default() -> Self {
@@ -83,15 +69,15 @@ pub mod root {
                 }
             }
         }
-        extern "C" {
+        unsafe extern "C" {
             #[link_name = "\u{1}_ZN1w3hehEv"]
             pub fn heh() -> root::w::whatever_int_t;
         }
-        extern "C" {
+        unsafe extern "C" {
             #[link_name = "\u{1}_ZN1w3fooEv"]
             pub fn foo() -> root::C<::std::os::raw::c_int>;
         }
-        extern "C" {
+        unsafe extern "C" {
             #[link_name = "\u{1}_ZN1w4barrEv"]
             pub fn barr() -> root::C<f32>;
         }
@@ -99,7 +85,7 @@ pub mod root {
     pub mod foobar {
         #[allow(unused_imports)]
         use self::super::super::root;
-        extern "C" {
+        unsafe extern "C" {
             #[link_name = "\u{1}_ZN6foobar3fooEv"]
             pub fn foo();
         }
@@ -107,7 +93,7 @@ pub mod root {
     pub mod faraway {
         #[allow(unused_imports)]
         use self::super::super::root;
-        extern "C" {
+        unsafe extern "C" {
             #[link_name = "\u{1}_ZN7faraway3barEv"]
             pub fn bar();
         }

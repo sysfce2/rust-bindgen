@@ -14,8 +14,6 @@
 //! ```
 //!
 #![deny(missing_docs)]
-extern crate clap;
-extern crate quickchecking;
 
 use clap::{Arg, ArgAction, Command};
 use std::path::PathBuf;
@@ -43,9 +41,10 @@ fn parse_tests_count(v: &str) -> Result<u64, String> {
 // Parse CLI argument input for fuzzed headers output path.
 fn parse_path(v: &str) -> Result<PathBuf, String> {
     let path = PathBuf::from(v);
-    match path.is_dir() {
-        true => Ok(path),
-        false => Err(String::from("Provided directory path does not exist.")),
+    if path.is_dir() {
+        Ok(path)
+    } else {
+        Err(String::from("Provided directory path does not exist."))
     }
 }
 
@@ -107,5 +106,5 @@ fn main() {
     let generate_range = *matches.get_one::<usize>("range").unwrap();
     let tests = *matches.get_one::<u64>("count").unwrap();
 
-    quickchecking::test_bindgen(generate_range, tests, output_path)
+    quickchecking::test_bindgen(generate_range, tests, output_path);
 }

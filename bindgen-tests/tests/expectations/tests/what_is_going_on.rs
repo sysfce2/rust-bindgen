@@ -4,26 +4,18 @@
 pub struct UnknownUnits {
     pub _address: u8,
 }
-#[test]
-fn bindgen_test_layout_UnknownUnits() {
-    assert_eq!(
-        ::std::mem::size_of::<UnknownUnits>(),
-        1usize,
-        concat!("Size of: ", stringify!(UnknownUnits)),
-    );
-    assert_eq!(
-        ::std::mem::align_of::<UnknownUnits>(),
-        1usize,
-        concat!("Alignment of ", stringify!(UnknownUnits)),
-    );
-}
+#[allow(clippy::unnecessary_operation, clippy::identity_op)]
+const _: () = {
+    ["Size of UnknownUnits"][::std::mem::size_of::<UnknownUnits>() - 1usize];
+    ["Alignment of UnknownUnits"][::std::mem::align_of::<UnknownUnits>() - 1usize];
+};
 pub type Float = f32;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct PointTyped<F> {
+    pub _phantom_0: ::std::marker::PhantomData<::std::cell::UnsafeCell<F>>,
     pub x: F,
     pub y: F,
-    pub _phantom_0: ::std::marker::PhantomData<::std::cell::UnsafeCell<F>>,
 }
 impl<F> Default for PointTyped<F> {
     fn default() -> Self {

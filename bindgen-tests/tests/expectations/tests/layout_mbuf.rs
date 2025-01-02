@@ -15,10 +15,7 @@ where
     Storage: AsRef<[u8]> + AsMut<[u8]>,
 {
     #[inline]
-    pub fn get_bit(&self, index: usize) -> bool {
-        debug_assert!(index / 8 < self.storage.as_ref().len());
-        let byte_index = index / 8;
-        let byte = self.storage.as_ref()[byte_index];
+    fn extract_bit(byte: u8, index: usize) -> bool {
         let bit_index = if cfg!(target_endian = "big") {
             7 - (index % 8)
         } else {
@@ -28,21 +25,44 @@ where
         byte & mask == mask
     }
     #[inline]
-    pub fn set_bit(&mut self, index: usize, val: bool) {
+    pub fn get_bit(&self, index: usize) -> bool {
         debug_assert!(index / 8 < self.storage.as_ref().len());
         let byte_index = index / 8;
-        let byte = &mut self.storage.as_mut()[byte_index];
+        let byte = self.storage.as_ref()[byte_index];
+        Self::extract_bit(byte, index)
+    }
+    #[inline]
+    pub unsafe fn raw_get_bit(this: *const Self, index: usize) -> bool {
+        debug_assert!(index / 8 < core::mem::size_of::<Storage>());
+        let byte_index = index / 8;
+        let byte = *(core::ptr::addr_of!((*this).storage) as *const u8)
+            .offset(byte_index as isize);
+        Self::extract_bit(byte, index)
+    }
+    #[inline]
+    fn change_bit(byte: u8, index: usize, val: bool) -> u8 {
         let bit_index = if cfg!(target_endian = "big") {
             7 - (index % 8)
         } else {
             index % 8
         };
         let mask = 1 << bit_index;
-        if val {
-            *byte |= mask;
-        } else {
-            *byte &= !mask;
-        }
+        if val { byte | mask } else { byte & !mask }
+    }
+    #[inline]
+    pub fn set_bit(&mut self, index: usize, val: bool) {
+        debug_assert!(index / 8 < self.storage.as_ref().len());
+        let byte_index = index / 8;
+        let byte = &mut self.storage.as_mut()[byte_index];
+        *byte = Self::change_bit(*byte, index, val);
+    }
+    #[inline]
+    pub unsafe fn raw_set_bit(this: *mut Self, index: usize, val: bool) {
+        debug_assert!(index / 8 < core::mem::size_of::<Storage>());
+        let byte_index = index / 8;
+        let byte = (core::ptr::addr_of_mut!((*this).storage) as *mut u8)
+            .offset(byte_index as isize);
+        *byte = Self::change_bit(*byte, index, val);
     }
     #[inline]
     pub fn get(&self, bit_offset: usize, bit_width: u8) -> u64 {
@@ -54,6 +74,26 @@ where
         let mut val = 0;
         for i in 0..(bit_width as usize) {
             if self.get_bit(i + bit_offset) {
+                let index = if cfg!(target_endian = "big") {
+                    bit_width as usize - 1 - i
+                } else {
+                    i
+                };
+                val |= 1 << index;
+            }
+        }
+        val
+    }
+    #[inline]
+    pub unsafe fn raw_get(this: *const Self, bit_offset: usize, bit_width: u8) -> u64 {
+        debug_assert!(bit_width <= 64);
+        debug_assert!(bit_offset / 8 < core::mem::size_of::<Storage>());
+        debug_assert!(
+            (bit_offset + (bit_width as usize)) / 8 <= core::mem::size_of::<Storage>(),
+        );
+        let mut val = 0;
+        for i in 0..(bit_width as usize) {
+            if Self::raw_get_bit(this, i + bit_offset) {
                 let index = if cfg!(target_endian = "big") {
                     bit_width as usize - 1 - i
                 } else {
@@ -82,6 +122,24 @@ where
             self.set_bit(index + bit_offset, val_bit_is_set);
         }
     }
+    #[inline]
+    pub unsafe fn raw_set(this: *mut Self, bit_offset: usize, bit_width: u8, val: u64) {
+        debug_assert!(bit_width <= 64);
+        debug_assert!(bit_offset / 8 < core::mem::size_of::<Storage>());
+        debug_assert!(
+            (bit_offset + (bit_width as usize)) / 8 <= core::mem::size_of::<Storage>(),
+        );
+        for i in 0..(bit_width as usize) {
+            let mask = 1 << i;
+            let val_bit_is_set = val & mask == mask;
+            let index = if cfg!(target_endian = "big") {
+                bit_width as usize - 1 - i
+            } else {
+                i
+            };
+            Self::raw_set_bit(this, index + bit_offset, val_bit_is_set);
+        }
+    }
 }
 pub const RTE_CACHE_LINE_MIN_SIZE: u32 = 64;
 pub const RTE_CACHE_LINE_SIZE: u32 = 64;
@@ -96,26 +154,14 @@ pub struct rte_atomic16_t {
     ///< An internal counter value.
     pub cnt: i16,
 }
-#[test]
-fn bindgen_test_layout_rte_atomic16_t() {
-    const UNINIT: ::std::mem::MaybeUninit<rte_atomic16_t> = ::std::mem::MaybeUninit::uninit();
-    let ptr = UNINIT.as_ptr();
-    assert_eq!(
-        ::std::mem::size_of::<rte_atomic16_t>(),
-        2usize,
-        concat!("Size of: ", stringify!(rte_atomic16_t)),
-    );
-    assert_eq!(
-        ::std::mem::align_of::<rte_atomic16_t>(),
-        2usize,
-        concat!("Alignment of ", stringify!(rte_atomic16_t)),
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr).cnt) as usize - ptr as usize },
-        0usize,
-        concat!("Offset of field: ", stringify!(rte_atomic16_t), "::", stringify!(cnt)),
-    );
-}
+#[allow(clippy::unnecessary_operation, clippy::identity_op)]
+const _: () = {
+    ["Size of rte_atomic16_t"][::std::mem::size_of::<rte_atomic16_t>() - 2usize];
+    ["Alignment of rte_atomic16_t"][::std::mem::align_of::<rte_atomic16_t>() - 2usize];
+    [
+        "Offset of field: rte_atomic16_t::cnt",
+    ][::std::mem::offset_of!(rte_atomic16_t, cnt) - 0usize];
+};
 /// The generic rte_mbuf, containing a packet mbuf.
 #[repr(C)]
 #[repr(align(64))]
@@ -177,41 +223,21 @@ pub union rte_mbuf__bindgen_ty_1 {
     ///< Non-atomically accessed refcnt
     pub refcnt: u16,
 }
-#[test]
-fn bindgen_test_layout_rte_mbuf__bindgen_ty_1() {
-    const UNINIT: ::std::mem::MaybeUninit<rte_mbuf__bindgen_ty_1> = ::std::mem::MaybeUninit::uninit();
-    let ptr = UNINIT.as_ptr();
-    assert_eq!(
-        ::std::mem::size_of::<rte_mbuf__bindgen_ty_1>(),
-        2usize,
-        concat!("Size of: ", stringify!(rte_mbuf__bindgen_ty_1)),
-    );
-    assert_eq!(
-        ::std::mem::align_of::<rte_mbuf__bindgen_ty_1>(),
-        2usize,
-        concat!("Alignment of ", stringify!(rte_mbuf__bindgen_ty_1)),
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr).refcnt_atomic) as usize - ptr as usize },
-        0usize,
-        concat!(
-            "Offset of field: ",
-            stringify!(rte_mbuf__bindgen_ty_1),
-            "::",
-            stringify!(refcnt_atomic),
-        ),
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr).refcnt) as usize - ptr as usize },
-        0usize,
-        concat!(
-            "Offset of field: ",
-            stringify!(rte_mbuf__bindgen_ty_1),
-            "::",
-            stringify!(refcnt),
-        ),
-    );
-}
+#[allow(clippy::unnecessary_operation, clippy::identity_op)]
+const _: () = {
+    [
+        "Size of rte_mbuf__bindgen_ty_1",
+    ][::std::mem::size_of::<rte_mbuf__bindgen_ty_1>() - 2usize];
+    [
+        "Alignment of rte_mbuf__bindgen_ty_1",
+    ][::std::mem::align_of::<rte_mbuf__bindgen_ty_1>() - 2usize];
+    [
+        "Offset of field: rte_mbuf__bindgen_ty_1::refcnt_atomic",
+    ][::std::mem::offset_of!(rte_mbuf__bindgen_ty_1, refcnt_atomic) - 0usize];
+    [
+        "Offset of field: rte_mbuf__bindgen_ty_1::refcnt",
+    ][::std::mem::offset_of!(rte_mbuf__bindgen_ty_1, refcnt) - 0usize];
+};
 impl Default for rte_mbuf__bindgen_ty_1 {
     fn default() -> Self {
         let mut s = ::std::mem::MaybeUninit::<Self>::uninit();
@@ -235,19 +261,15 @@ pub struct rte_mbuf__bindgen_ty_2__bindgen_ty_1 {
     pub _bitfield_align_1: [u8; 0],
     pub _bitfield_1: __BindgenBitfieldUnit<[u8; 4usize]>,
 }
-#[test]
-fn bindgen_test_layout_rte_mbuf__bindgen_ty_2__bindgen_ty_1() {
-    assert_eq!(
-        ::std::mem::size_of::<rte_mbuf__bindgen_ty_2__bindgen_ty_1>(),
-        4usize,
-        concat!("Size of: ", stringify!(rte_mbuf__bindgen_ty_2__bindgen_ty_1)),
-    );
-    assert_eq!(
-        ::std::mem::align_of::<rte_mbuf__bindgen_ty_2__bindgen_ty_1>(),
-        4usize,
-        concat!("Alignment of ", stringify!(rte_mbuf__bindgen_ty_2__bindgen_ty_1)),
-    );
-}
+#[allow(clippy::unnecessary_operation, clippy::identity_op)]
+const _: () = {
+    [
+        "Size of rte_mbuf__bindgen_ty_2__bindgen_ty_1",
+    ][::std::mem::size_of::<rte_mbuf__bindgen_ty_2__bindgen_ty_1>() - 4usize];
+    [
+        "Alignment of rte_mbuf__bindgen_ty_2__bindgen_ty_1",
+    ][::std::mem::align_of::<rte_mbuf__bindgen_ty_2__bindgen_ty_1>() - 4usize];
+};
 impl rte_mbuf__bindgen_ty_2__bindgen_ty_1 {
     #[inline]
     pub fn l2_type(&self) -> u32 {
@@ -258,6 +280,31 @@ impl rte_mbuf__bindgen_ty_2__bindgen_ty_1 {
         unsafe {
             let val: u32 = ::std::mem::transmute(val);
             self._bitfield_1.set(0usize, 4u8, val as u64)
+        }
+    }
+    #[inline]
+    pub unsafe fn l2_type_raw(this: *const Self) -> u32 {
+        unsafe {
+            ::std::mem::transmute(
+                <__BindgenBitfieldUnit<
+                    [u8; 4usize],
+                >>::raw_get(::std::ptr::addr_of!((*this)._bitfield_1), 0usize, 4u8)
+                    as u32,
+            )
+        }
+    }
+    #[inline]
+    pub unsafe fn set_l2_type_raw(this: *mut Self, val: u32) {
+        unsafe {
+            let val: u32 = ::std::mem::transmute(val);
+            <__BindgenBitfieldUnit<
+                [u8; 4usize],
+            >>::raw_set(
+                ::std::ptr::addr_of_mut!((*this)._bitfield_1),
+                0usize,
+                4u8,
+                val as u64,
+            )
         }
     }
     #[inline]
@@ -272,6 +319,31 @@ impl rte_mbuf__bindgen_ty_2__bindgen_ty_1 {
         }
     }
     #[inline]
+    pub unsafe fn l3_type_raw(this: *const Self) -> u32 {
+        unsafe {
+            ::std::mem::transmute(
+                <__BindgenBitfieldUnit<
+                    [u8; 4usize],
+                >>::raw_get(::std::ptr::addr_of!((*this)._bitfield_1), 4usize, 4u8)
+                    as u32,
+            )
+        }
+    }
+    #[inline]
+    pub unsafe fn set_l3_type_raw(this: *mut Self, val: u32) {
+        unsafe {
+            let val: u32 = ::std::mem::transmute(val);
+            <__BindgenBitfieldUnit<
+                [u8; 4usize],
+            >>::raw_set(
+                ::std::ptr::addr_of_mut!((*this)._bitfield_1),
+                4usize,
+                4u8,
+                val as u64,
+            )
+        }
+    }
+    #[inline]
     pub fn l4_type(&self) -> u32 {
         unsafe { ::std::mem::transmute(self._bitfield_1.get(8usize, 4u8) as u32) }
     }
@@ -280,6 +352,31 @@ impl rte_mbuf__bindgen_ty_2__bindgen_ty_1 {
         unsafe {
             let val: u32 = ::std::mem::transmute(val);
             self._bitfield_1.set(8usize, 4u8, val as u64)
+        }
+    }
+    #[inline]
+    pub unsafe fn l4_type_raw(this: *const Self) -> u32 {
+        unsafe {
+            ::std::mem::transmute(
+                <__BindgenBitfieldUnit<
+                    [u8; 4usize],
+                >>::raw_get(::std::ptr::addr_of!((*this)._bitfield_1), 8usize, 4u8)
+                    as u32,
+            )
+        }
+    }
+    #[inline]
+    pub unsafe fn set_l4_type_raw(this: *mut Self, val: u32) {
+        unsafe {
+            let val: u32 = ::std::mem::transmute(val);
+            <__BindgenBitfieldUnit<
+                [u8; 4usize],
+            >>::raw_set(
+                ::std::ptr::addr_of_mut!((*this)._bitfield_1),
+                8usize,
+                4u8,
+                val as u64,
+            )
         }
     }
     #[inline]
@@ -294,6 +391,31 @@ impl rte_mbuf__bindgen_ty_2__bindgen_ty_1 {
         }
     }
     #[inline]
+    pub unsafe fn tun_type_raw(this: *const Self) -> u32 {
+        unsafe {
+            ::std::mem::transmute(
+                <__BindgenBitfieldUnit<
+                    [u8; 4usize],
+                >>::raw_get(::std::ptr::addr_of!((*this)._bitfield_1), 12usize, 4u8)
+                    as u32,
+            )
+        }
+    }
+    #[inline]
+    pub unsafe fn set_tun_type_raw(this: *mut Self, val: u32) {
+        unsafe {
+            let val: u32 = ::std::mem::transmute(val);
+            <__BindgenBitfieldUnit<
+                [u8; 4usize],
+            >>::raw_set(
+                ::std::ptr::addr_of_mut!((*this)._bitfield_1),
+                12usize,
+                4u8,
+                val as u64,
+            )
+        }
+    }
+    #[inline]
     pub fn inner_l2_type(&self) -> u32 {
         unsafe { ::std::mem::transmute(self._bitfield_1.get(16usize, 4u8) as u32) }
     }
@@ -302,6 +424,31 @@ impl rte_mbuf__bindgen_ty_2__bindgen_ty_1 {
         unsafe {
             let val: u32 = ::std::mem::transmute(val);
             self._bitfield_1.set(16usize, 4u8, val as u64)
+        }
+    }
+    #[inline]
+    pub unsafe fn inner_l2_type_raw(this: *const Self) -> u32 {
+        unsafe {
+            ::std::mem::transmute(
+                <__BindgenBitfieldUnit<
+                    [u8; 4usize],
+                >>::raw_get(::std::ptr::addr_of!((*this)._bitfield_1), 16usize, 4u8)
+                    as u32,
+            )
+        }
+    }
+    #[inline]
+    pub unsafe fn set_inner_l2_type_raw(this: *mut Self, val: u32) {
+        unsafe {
+            let val: u32 = ::std::mem::transmute(val);
+            <__BindgenBitfieldUnit<
+                [u8; 4usize],
+            >>::raw_set(
+                ::std::ptr::addr_of_mut!((*this)._bitfield_1),
+                16usize,
+                4u8,
+                val as u64,
+            )
         }
     }
     #[inline]
@@ -316,6 +463,31 @@ impl rte_mbuf__bindgen_ty_2__bindgen_ty_1 {
         }
     }
     #[inline]
+    pub unsafe fn inner_l3_type_raw(this: *const Self) -> u32 {
+        unsafe {
+            ::std::mem::transmute(
+                <__BindgenBitfieldUnit<
+                    [u8; 4usize],
+                >>::raw_get(::std::ptr::addr_of!((*this)._bitfield_1), 20usize, 4u8)
+                    as u32,
+            )
+        }
+    }
+    #[inline]
+    pub unsafe fn set_inner_l3_type_raw(this: *mut Self, val: u32) {
+        unsafe {
+            let val: u32 = ::std::mem::transmute(val);
+            <__BindgenBitfieldUnit<
+                [u8; 4usize],
+            >>::raw_set(
+                ::std::ptr::addr_of_mut!((*this)._bitfield_1),
+                20usize,
+                4u8,
+                val as u64,
+            )
+        }
+    }
+    #[inline]
     pub fn inner_l4_type(&self) -> u32 {
         unsafe { ::std::mem::transmute(self._bitfield_1.get(24usize, 4u8) as u32) }
     }
@@ -324,6 +496,31 @@ impl rte_mbuf__bindgen_ty_2__bindgen_ty_1 {
         unsafe {
             let val: u32 = ::std::mem::transmute(val);
             self._bitfield_1.set(24usize, 4u8, val as u64)
+        }
+    }
+    #[inline]
+    pub unsafe fn inner_l4_type_raw(this: *const Self) -> u32 {
+        unsafe {
+            ::std::mem::transmute(
+                <__BindgenBitfieldUnit<
+                    [u8; 4usize],
+                >>::raw_get(::std::ptr::addr_of!((*this)._bitfield_1), 24usize, 4u8)
+                    as u32,
+            )
+        }
+    }
+    #[inline]
+    pub unsafe fn set_inner_l4_type_raw(this: *mut Self, val: u32) {
+        unsafe {
+            let val: u32 = ::std::mem::transmute(val);
+            <__BindgenBitfieldUnit<
+                [u8; 4usize],
+            >>::raw_set(
+                ::std::ptr::addr_of_mut!((*this)._bitfield_1),
+                24usize,
+                4u8,
+                val as u64,
+            )
         }
     }
     #[inline]
@@ -409,31 +606,18 @@ impl rte_mbuf__bindgen_ty_2__bindgen_ty_1 {
         __bindgen_bitfield_unit
     }
 }
-#[test]
-fn bindgen_test_layout_rte_mbuf__bindgen_ty_2() {
-    const UNINIT: ::std::mem::MaybeUninit<rte_mbuf__bindgen_ty_2> = ::std::mem::MaybeUninit::uninit();
-    let ptr = UNINIT.as_ptr();
-    assert_eq!(
-        ::std::mem::size_of::<rte_mbuf__bindgen_ty_2>(),
-        4usize,
-        concat!("Size of: ", stringify!(rte_mbuf__bindgen_ty_2)),
-    );
-    assert_eq!(
-        ::std::mem::align_of::<rte_mbuf__bindgen_ty_2>(),
-        4usize,
-        concat!("Alignment of ", stringify!(rte_mbuf__bindgen_ty_2)),
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr).packet_type) as usize - ptr as usize },
-        0usize,
-        concat!(
-            "Offset of field: ",
-            stringify!(rte_mbuf__bindgen_ty_2),
-            "::",
-            stringify!(packet_type),
-        ),
-    );
-}
+#[allow(clippy::unnecessary_operation, clippy::identity_op)]
+const _: () = {
+    [
+        "Size of rte_mbuf__bindgen_ty_2",
+    ][::std::mem::size_of::<rte_mbuf__bindgen_ty_2>() - 4usize];
+    [
+        "Alignment of rte_mbuf__bindgen_ty_2",
+    ][::std::mem::align_of::<rte_mbuf__bindgen_ty_2>() - 4usize];
+    [
+        "Offset of field: rte_mbuf__bindgen_ty_2::packet_type",
+    ][::std::mem::offset_of!(rte_mbuf__bindgen_ty_2, packet_type) - 0usize];
+};
 impl Default for rte_mbuf__bindgen_ty_2 {
     fn default() -> Self {
         let mut s = ::std::mem::MaybeUninit::<Self>::uninit();
@@ -473,86 +657,44 @@ pub struct rte_mbuf__bindgen_ty_3__bindgen_ty_1__bindgen_ty_1__bindgen_ty_1 {
     pub hash: u16,
     pub id: u16,
 }
-#[test]
-fn bindgen_test_layout_rte_mbuf__bindgen_ty_3__bindgen_ty_1__bindgen_ty_1__bindgen_ty_1() {
-    const UNINIT: ::std::mem::MaybeUninit<
+#[allow(clippy::unnecessary_operation, clippy::identity_op)]
+const _: () = {
+    [
+        "Size of rte_mbuf__bindgen_ty_3__bindgen_ty_1__bindgen_ty_1__bindgen_ty_1",
+    ][::std::mem::size_of::<
         rte_mbuf__bindgen_ty_3__bindgen_ty_1__bindgen_ty_1__bindgen_ty_1,
-    > = ::std::mem::MaybeUninit::uninit();
-    let ptr = UNINIT.as_ptr();
-    assert_eq!(
-        ::std::mem::size_of::<
-            rte_mbuf__bindgen_ty_3__bindgen_ty_1__bindgen_ty_1__bindgen_ty_1,
-        >(),
-        4usize,
-        concat!(
-            "Size of: ",
-            stringify!(rte_mbuf__bindgen_ty_3__bindgen_ty_1__bindgen_ty_1__bindgen_ty_1),
-        ),
-    );
-    assert_eq!(
-        ::std::mem::align_of::<
-            rte_mbuf__bindgen_ty_3__bindgen_ty_1__bindgen_ty_1__bindgen_ty_1,
-        >(),
-        2usize,
-        concat!(
-            "Alignment of ",
-            stringify!(rte_mbuf__bindgen_ty_3__bindgen_ty_1__bindgen_ty_1__bindgen_ty_1),
-        ),
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr).hash) as usize - ptr as usize },
-        0usize,
-        concat!(
-            "Offset of field: ",
-            stringify!(rte_mbuf__bindgen_ty_3__bindgen_ty_1__bindgen_ty_1__bindgen_ty_1),
-            "::",
-            stringify!(hash),
-        ),
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr).id) as usize - ptr as usize },
-        2usize,
-        concat!(
-            "Offset of field: ",
-            stringify!(rte_mbuf__bindgen_ty_3__bindgen_ty_1__bindgen_ty_1__bindgen_ty_1),
-            "::",
-            stringify!(id),
-        ),
-    );
-}
-#[test]
-fn bindgen_test_layout_rte_mbuf__bindgen_ty_3__bindgen_ty_1__bindgen_ty_1() {
-    const UNINIT: ::std::mem::MaybeUninit<
-        rte_mbuf__bindgen_ty_3__bindgen_ty_1__bindgen_ty_1,
-    > = ::std::mem::MaybeUninit::uninit();
-    let ptr = UNINIT.as_ptr();
-    assert_eq!(
-        ::std::mem::size_of::<rte_mbuf__bindgen_ty_3__bindgen_ty_1__bindgen_ty_1>(),
-        4usize,
-        concat!(
-            "Size of: ",
-            stringify!(rte_mbuf__bindgen_ty_3__bindgen_ty_1__bindgen_ty_1),
-        ),
-    );
-    assert_eq!(
-        ::std::mem::align_of::<rte_mbuf__bindgen_ty_3__bindgen_ty_1__bindgen_ty_1>(),
-        4usize,
-        concat!(
-            "Alignment of ",
-            stringify!(rte_mbuf__bindgen_ty_3__bindgen_ty_1__bindgen_ty_1),
-        ),
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr).lo) as usize - ptr as usize },
-        0usize,
-        concat!(
-            "Offset of field: ",
-            stringify!(rte_mbuf__bindgen_ty_3__bindgen_ty_1__bindgen_ty_1),
-            "::",
-            stringify!(lo),
-        ),
-    );
-}
+    >() - 4usize];
+    [
+        "Alignment of rte_mbuf__bindgen_ty_3__bindgen_ty_1__bindgen_ty_1__bindgen_ty_1",
+    ][::std::mem::align_of::<
+        rte_mbuf__bindgen_ty_3__bindgen_ty_1__bindgen_ty_1__bindgen_ty_1,
+    >() - 2usize];
+    [
+        "Offset of field: rte_mbuf__bindgen_ty_3__bindgen_ty_1__bindgen_ty_1__bindgen_ty_1::hash",
+    ][::std::mem::offset_of!(
+        rte_mbuf__bindgen_ty_3__bindgen_ty_1__bindgen_ty_1__bindgen_ty_1, hash
+    ) - 0usize];
+    [
+        "Offset of field: rte_mbuf__bindgen_ty_3__bindgen_ty_1__bindgen_ty_1__bindgen_ty_1::id",
+    ][::std::mem::offset_of!(
+        rte_mbuf__bindgen_ty_3__bindgen_ty_1__bindgen_ty_1__bindgen_ty_1, id
+    ) - 2usize];
+};
+#[allow(clippy::unnecessary_operation, clippy::identity_op)]
+const _: () = {
+    [
+        "Size of rte_mbuf__bindgen_ty_3__bindgen_ty_1__bindgen_ty_1",
+    ][::std::mem::size_of::<rte_mbuf__bindgen_ty_3__bindgen_ty_1__bindgen_ty_1>()
+        - 4usize];
+    [
+        "Alignment of rte_mbuf__bindgen_ty_3__bindgen_ty_1__bindgen_ty_1",
+    ][::std::mem::align_of::<rte_mbuf__bindgen_ty_3__bindgen_ty_1__bindgen_ty_1>()
+        - 4usize];
+    [
+        "Offset of field: rte_mbuf__bindgen_ty_3__bindgen_ty_1__bindgen_ty_1::lo",
+    ][::std::mem::offset_of!(rte_mbuf__bindgen_ty_3__bindgen_ty_1__bindgen_ty_1, lo)
+        - 0usize];
+};
 impl Default for rte_mbuf__bindgen_ty_3__bindgen_ty_1__bindgen_ty_1 {
     fn default() -> Self {
         let mut s = ::std::mem::MaybeUninit::<Self>::uninit();
@@ -562,31 +704,18 @@ impl Default for rte_mbuf__bindgen_ty_3__bindgen_ty_1__bindgen_ty_1 {
         }
     }
 }
-#[test]
-fn bindgen_test_layout_rte_mbuf__bindgen_ty_3__bindgen_ty_1() {
-    const UNINIT: ::std::mem::MaybeUninit<rte_mbuf__bindgen_ty_3__bindgen_ty_1> = ::std::mem::MaybeUninit::uninit();
-    let ptr = UNINIT.as_ptr();
-    assert_eq!(
-        ::std::mem::size_of::<rte_mbuf__bindgen_ty_3__bindgen_ty_1>(),
-        8usize,
-        concat!("Size of: ", stringify!(rte_mbuf__bindgen_ty_3__bindgen_ty_1)),
-    );
-    assert_eq!(
-        ::std::mem::align_of::<rte_mbuf__bindgen_ty_3__bindgen_ty_1>(),
-        4usize,
-        concat!("Alignment of ", stringify!(rte_mbuf__bindgen_ty_3__bindgen_ty_1)),
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr).hi) as usize - ptr as usize },
-        4usize,
-        concat!(
-            "Offset of field: ",
-            stringify!(rte_mbuf__bindgen_ty_3__bindgen_ty_1),
-            "::",
-            stringify!(hi),
-        ),
-    );
-}
+#[allow(clippy::unnecessary_operation, clippy::identity_op)]
+const _: () = {
+    [
+        "Size of rte_mbuf__bindgen_ty_3__bindgen_ty_1",
+    ][::std::mem::size_of::<rte_mbuf__bindgen_ty_3__bindgen_ty_1>() - 8usize];
+    [
+        "Alignment of rte_mbuf__bindgen_ty_3__bindgen_ty_1",
+    ][::std::mem::align_of::<rte_mbuf__bindgen_ty_3__bindgen_ty_1>() - 4usize];
+    [
+        "Offset of field: rte_mbuf__bindgen_ty_3__bindgen_ty_1::hi",
+    ][::std::mem::offset_of!(rte_mbuf__bindgen_ty_3__bindgen_ty_1, hi) - 4usize];
+};
 impl Default for rte_mbuf__bindgen_ty_3__bindgen_ty_1 {
     fn default() -> Self {
         let mut s = ::std::mem::MaybeUninit::<Self>::uninit();
@@ -602,96 +731,42 @@ pub struct rte_mbuf__bindgen_ty_3__bindgen_ty_2 {
     pub lo: u32,
     pub hi: u32,
 }
-#[test]
-fn bindgen_test_layout_rte_mbuf__bindgen_ty_3__bindgen_ty_2() {
-    const UNINIT: ::std::mem::MaybeUninit<rte_mbuf__bindgen_ty_3__bindgen_ty_2> = ::std::mem::MaybeUninit::uninit();
-    let ptr = UNINIT.as_ptr();
-    assert_eq!(
-        ::std::mem::size_of::<rte_mbuf__bindgen_ty_3__bindgen_ty_2>(),
-        8usize,
-        concat!("Size of: ", stringify!(rte_mbuf__bindgen_ty_3__bindgen_ty_2)),
-    );
-    assert_eq!(
-        ::std::mem::align_of::<rte_mbuf__bindgen_ty_3__bindgen_ty_2>(),
-        4usize,
-        concat!("Alignment of ", stringify!(rte_mbuf__bindgen_ty_3__bindgen_ty_2)),
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr).lo) as usize - ptr as usize },
-        0usize,
-        concat!(
-            "Offset of field: ",
-            stringify!(rte_mbuf__bindgen_ty_3__bindgen_ty_2),
-            "::",
-            stringify!(lo),
-        ),
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr).hi) as usize - ptr as usize },
-        4usize,
-        concat!(
-            "Offset of field: ",
-            stringify!(rte_mbuf__bindgen_ty_3__bindgen_ty_2),
-            "::",
-            stringify!(hi),
-        ),
-    );
-}
-#[test]
-fn bindgen_test_layout_rte_mbuf__bindgen_ty_3() {
-    const UNINIT: ::std::mem::MaybeUninit<rte_mbuf__bindgen_ty_3> = ::std::mem::MaybeUninit::uninit();
-    let ptr = UNINIT.as_ptr();
-    assert_eq!(
-        ::std::mem::size_of::<rte_mbuf__bindgen_ty_3>(),
-        8usize,
-        concat!("Size of: ", stringify!(rte_mbuf__bindgen_ty_3)),
-    );
-    assert_eq!(
-        ::std::mem::align_of::<rte_mbuf__bindgen_ty_3>(),
-        4usize,
-        concat!("Alignment of ", stringify!(rte_mbuf__bindgen_ty_3)),
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr).rss) as usize - ptr as usize },
-        0usize,
-        concat!(
-            "Offset of field: ",
-            stringify!(rte_mbuf__bindgen_ty_3),
-            "::",
-            stringify!(rss),
-        ),
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr).fdir) as usize - ptr as usize },
-        0usize,
-        concat!(
-            "Offset of field: ",
-            stringify!(rte_mbuf__bindgen_ty_3),
-            "::",
-            stringify!(fdir),
-        ),
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr).sched) as usize - ptr as usize },
-        0usize,
-        concat!(
-            "Offset of field: ",
-            stringify!(rte_mbuf__bindgen_ty_3),
-            "::",
-            stringify!(sched),
-        ),
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr).usr) as usize - ptr as usize },
-        0usize,
-        concat!(
-            "Offset of field: ",
-            stringify!(rte_mbuf__bindgen_ty_3),
-            "::",
-            stringify!(usr),
-        ),
-    );
-}
+#[allow(clippy::unnecessary_operation, clippy::identity_op)]
+const _: () = {
+    [
+        "Size of rte_mbuf__bindgen_ty_3__bindgen_ty_2",
+    ][::std::mem::size_of::<rte_mbuf__bindgen_ty_3__bindgen_ty_2>() - 8usize];
+    [
+        "Alignment of rte_mbuf__bindgen_ty_3__bindgen_ty_2",
+    ][::std::mem::align_of::<rte_mbuf__bindgen_ty_3__bindgen_ty_2>() - 4usize];
+    [
+        "Offset of field: rte_mbuf__bindgen_ty_3__bindgen_ty_2::lo",
+    ][::std::mem::offset_of!(rte_mbuf__bindgen_ty_3__bindgen_ty_2, lo) - 0usize];
+    [
+        "Offset of field: rte_mbuf__bindgen_ty_3__bindgen_ty_2::hi",
+    ][::std::mem::offset_of!(rte_mbuf__bindgen_ty_3__bindgen_ty_2, hi) - 4usize];
+};
+#[allow(clippy::unnecessary_operation, clippy::identity_op)]
+const _: () = {
+    [
+        "Size of rte_mbuf__bindgen_ty_3",
+    ][::std::mem::size_of::<rte_mbuf__bindgen_ty_3>() - 8usize];
+    [
+        "Alignment of rte_mbuf__bindgen_ty_3",
+    ][::std::mem::align_of::<rte_mbuf__bindgen_ty_3>() - 4usize];
+    [
+        "Offset of field: rte_mbuf__bindgen_ty_3::rss",
+    ][::std::mem::offset_of!(rte_mbuf__bindgen_ty_3, rss) - 0usize];
+    [
+        "Offset of field: rte_mbuf__bindgen_ty_3::fdir",
+    ][::std::mem::offset_of!(rte_mbuf__bindgen_ty_3, fdir) - 0usize];
+    [
+        "Offset of field: rte_mbuf__bindgen_ty_3::sched",
+    ][::std::mem::offset_of!(rte_mbuf__bindgen_ty_3, sched) - 0usize];
+    [
+        "Offset of field: rte_mbuf__bindgen_ty_3::usr",
+    ][::std::mem::offset_of!(rte_mbuf__bindgen_ty_3, usr) - 0usize];
+};
 impl Default for rte_mbuf__bindgen_ty_3 {
     fn default() -> Self {
         let mut s = ::std::mem::MaybeUninit::<Self>::uninit();
@@ -709,41 +784,21 @@ pub union rte_mbuf__bindgen_ty_4 {
     ///< Allow 8-byte userdata on 32-bit
     pub udata64: u64,
 }
-#[test]
-fn bindgen_test_layout_rte_mbuf__bindgen_ty_4() {
-    const UNINIT: ::std::mem::MaybeUninit<rte_mbuf__bindgen_ty_4> = ::std::mem::MaybeUninit::uninit();
-    let ptr = UNINIT.as_ptr();
-    assert_eq!(
-        ::std::mem::size_of::<rte_mbuf__bindgen_ty_4>(),
-        8usize,
-        concat!("Size of: ", stringify!(rte_mbuf__bindgen_ty_4)),
-    );
-    assert_eq!(
-        ::std::mem::align_of::<rte_mbuf__bindgen_ty_4>(),
-        8usize,
-        concat!("Alignment of ", stringify!(rte_mbuf__bindgen_ty_4)),
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr).userdata) as usize - ptr as usize },
-        0usize,
-        concat!(
-            "Offset of field: ",
-            stringify!(rte_mbuf__bindgen_ty_4),
-            "::",
-            stringify!(userdata),
-        ),
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr).udata64) as usize - ptr as usize },
-        0usize,
-        concat!(
-            "Offset of field: ",
-            stringify!(rte_mbuf__bindgen_ty_4),
-            "::",
-            stringify!(udata64),
-        ),
-    );
-}
+#[allow(clippy::unnecessary_operation, clippy::identity_op)]
+const _: () = {
+    [
+        "Size of rte_mbuf__bindgen_ty_4",
+    ][::std::mem::size_of::<rte_mbuf__bindgen_ty_4>() - 8usize];
+    [
+        "Alignment of rte_mbuf__bindgen_ty_4",
+    ][::std::mem::align_of::<rte_mbuf__bindgen_ty_4>() - 8usize];
+    [
+        "Offset of field: rte_mbuf__bindgen_ty_4::userdata",
+    ][::std::mem::offset_of!(rte_mbuf__bindgen_ty_4, userdata) - 0usize];
+    [
+        "Offset of field: rte_mbuf__bindgen_ty_4::udata64",
+    ][::std::mem::offset_of!(rte_mbuf__bindgen_ty_4, udata64) - 0usize];
+};
 impl Default for rte_mbuf__bindgen_ty_4 {
     fn default() -> Self {
         let mut s = ::std::mem::MaybeUninit::<Self>::uninit();
@@ -767,19 +822,15 @@ pub struct rte_mbuf__bindgen_ty_5__bindgen_ty_1 {
     pub _bitfield_align_1: [u16; 0],
     pub _bitfield_1: __BindgenBitfieldUnit<[u8; 7usize]>,
 }
-#[test]
-fn bindgen_test_layout_rte_mbuf__bindgen_ty_5__bindgen_ty_1() {
-    assert_eq!(
-        ::std::mem::size_of::<rte_mbuf__bindgen_ty_5__bindgen_ty_1>(),
-        8usize,
-        concat!("Size of: ", stringify!(rte_mbuf__bindgen_ty_5__bindgen_ty_1)),
-    );
-    assert_eq!(
-        ::std::mem::align_of::<rte_mbuf__bindgen_ty_5__bindgen_ty_1>(),
-        8usize,
-        concat!("Alignment of ", stringify!(rte_mbuf__bindgen_ty_5__bindgen_ty_1)),
-    );
-}
+#[allow(clippy::unnecessary_operation, clippy::identity_op)]
+const _: () = {
+    [
+        "Size of rte_mbuf__bindgen_ty_5__bindgen_ty_1",
+    ][::std::mem::size_of::<rte_mbuf__bindgen_ty_5__bindgen_ty_1>() - 8usize];
+    [
+        "Alignment of rte_mbuf__bindgen_ty_5__bindgen_ty_1",
+    ][::std::mem::align_of::<rte_mbuf__bindgen_ty_5__bindgen_ty_1>() - 8usize];
+};
 impl rte_mbuf__bindgen_ty_5__bindgen_ty_1 {
     #[inline]
     pub fn l2_len(&self) -> u64 {
@@ -790,6 +841,31 @@ impl rte_mbuf__bindgen_ty_5__bindgen_ty_1 {
         unsafe {
             let val: u64 = ::std::mem::transmute(val);
             self._bitfield_1.set(0usize, 7u8, val as u64)
+        }
+    }
+    #[inline]
+    pub unsafe fn l2_len_raw(this: *const Self) -> u64 {
+        unsafe {
+            ::std::mem::transmute(
+                <__BindgenBitfieldUnit<
+                    [u8; 7usize],
+                >>::raw_get(::std::ptr::addr_of!((*this)._bitfield_1), 0usize, 7u8)
+                    as u64,
+            )
+        }
+    }
+    #[inline]
+    pub unsafe fn set_l2_len_raw(this: *mut Self, val: u64) {
+        unsafe {
+            let val: u64 = ::std::mem::transmute(val);
+            <__BindgenBitfieldUnit<
+                [u8; 7usize],
+            >>::raw_set(
+                ::std::ptr::addr_of_mut!((*this)._bitfield_1),
+                0usize,
+                7u8,
+                val as u64,
+            )
         }
     }
     #[inline]
@@ -804,6 +880,31 @@ impl rte_mbuf__bindgen_ty_5__bindgen_ty_1 {
         }
     }
     #[inline]
+    pub unsafe fn l3_len_raw(this: *const Self) -> u64 {
+        unsafe {
+            ::std::mem::transmute(
+                <__BindgenBitfieldUnit<
+                    [u8; 7usize],
+                >>::raw_get(::std::ptr::addr_of!((*this)._bitfield_1), 7usize, 9u8)
+                    as u64,
+            )
+        }
+    }
+    #[inline]
+    pub unsafe fn set_l3_len_raw(this: *mut Self, val: u64) {
+        unsafe {
+            let val: u64 = ::std::mem::transmute(val);
+            <__BindgenBitfieldUnit<
+                [u8; 7usize],
+            >>::raw_set(
+                ::std::ptr::addr_of_mut!((*this)._bitfield_1),
+                7usize,
+                9u8,
+                val as u64,
+            )
+        }
+    }
+    #[inline]
     pub fn l4_len(&self) -> u64 {
         unsafe { ::std::mem::transmute(self._bitfield_1.get(16usize, 8u8) as u64) }
     }
@@ -812,6 +913,31 @@ impl rte_mbuf__bindgen_ty_5__bindgen_ty_1 {
         unsafe {
             let val: u64 = ::std::mem::transmute(val);
             self._bitfield_1.set(16usize, 8u8, val as u64)
+        }
+    }
+    #[inline]
+    pub unsafe fn l4_len_raw(this: *const Self) -> u64 {
+        unsafe {
+            ::std::mem::transmute(
+                <__BindgenBitfieldUnit<
+                    [u8; 7usize],
+                >>::raw_get(::std::ptr::addr_of!((*this)._bitfield_1), 16usize, 8u8)
+                    as u64,
+            )
+        }
+    }
+    #[inline]
+    pub unsafe fn set_l4_len_raw(this: *mut Self, val: u64) {
+        unsafe {
+            let val: u64 = ::std::mem::transmute(val);
+            <__BindgenBitfieldUnit<
+                [u8; 7usize],
+            >>::raw_set(
+                ::std::ptr::addr_of_mut!((*this)._bitfield_1),
+                16usize,
+                8u8,
+                val as u64,
+            )
         }
     }
     #[inline]
@@ -826,6 +952,31 @@ impl rte_mbuf__bindgen_ty_5__bindgen_ty_1 {
         }
     }
     #[inline]
+    pub unsafe fn tso_segsz_raw(this: *const Self) -> u64 {
+        unsafe {
+            ::std::mem::transmute(
+                <__BindgenBitfieldUnit<
+                    [u8; 7usize],
+                >>::raw_get(::std::ptr::addr_of!((*this)._bitfield_1), 24usize, 16u8)
+                    as u64,
+            )
+        }
+    }
+    #[inline]
+    pub unsafe fn set_tso_segsz_raw(this: *mut Self, val: u64) {
+        unsafe {
+            let val: u64 = ::std::mem::transmute(val);
+            <__BindgenBitfieldUnit<
+                [u8; 7usize],
+            >>::raw_set(
+                ::std::ptr::addr_of_mut!((*this)._bitfield_1),
+                24usize,
+                16u8,
+                val as u64,
+            )
+        }
+    }
+    #[inline]
     pub fn outer_l3_len(&self) -> u64 {
         unsafe { ::std::mem::transmute(self._bitfield_1.get(40usize, 9u8) as u64) }
     }
@@ -837,6 +988,31 @@ impl rte_mbuf__bindgen_ty_5__bindgen_ty_1 {
         }
     }
     #[inline]
+    pub unsafe fn outer_l3_len_raw(this: *const Self) -> u64 {
+        unsafe {
+            ::std::mem::transmute(
+                <__BindgenBitfieldUnit<
+                    [u8; 7usize],
+                >>::raw_get(::std::ptr::addr_of!((*this)._bitfield_1), 40usize, 9u8)
+                    as u64,
+            )
+        }
+    }
+    #[inline]
+    pub unsafe fn set_outer_l3_len_raw(this: *mut Self, val: u64) {
+        unsafe {
+            let val: u64 = ::std::mem::transmute(val);
+            <__BindgenBitfieldUnit<
+                [u8; 7usize],
+            >>::raw_set(
+                ::std::ptr::addr_of_mut!((*this)._bitfield_1),
+                40usize,
+                9u8,
+                val as u64,
+            )
+        }
+    }
+    #[inline]
     pub fn outer_l2_len(&self) -> u64 {
         unsafe { ::std::mem::transmute(self._bitfield_1.get(49usize, 7u8) as u64) }
     }
@@ -845,6 +1021,31 @@ impl rte_mbuf__bindgen_ty_5__bindgen_ty_1 {
         unsafe {
             let val: u64 = ::std::mem::transmute(val);
             self._bitfield_1.set(49usize, 7u8, val as u64)
+        }
+    }
+    #[inline]
+    pub unsafe fn outer_l2_len_raw(this: *const Self) -> u64 {
+        unsafe {
+            ::std::mem::transmute(
+                <__BindgenBitfieldUnit<
+                    [u8; 7usize],
+                >>::raw_get(::std::ptr::addr_of!((*this)._bitfield_1), 49usize, 7u8)
+                    as u64,
+            )
+        }
+    }
+    #[inline]
+    pub unsafe fn set_outer_l2_len_raw(this: *mut Self, val: u64) {
+        unsafe {
+            let val: u64 = ::std::mem::transmute(val);
+            <__BindgenBitfieldUnit<
+                [u8; 7usize],
+            >>::raw_set(
+                ::std::ptr::addr_of_mut!((*this)._bitfield_1),
+                49usize,
+                7u8,
+                val as u64,
+            )
         }
     }
     #[inline]
@@ -918,31 +1119,18 @@ impl rte_mbuf__bindgen_ty_5__bindgen_ty_1 {
         __bindgen_bitfield_unit
     }
 }
-#[test]
-fn bindgen_test_layout_rte_mbuf__bindgen_ty_5() {
-    const UNINIT: ::std::mem::MaybeUninit<rte_mbuf__bindgen_ty_5> = ::std::mem::MaybeUninit::uninit();
-    let ptr = UNINIT.as_ptr();
-    assert_eq!(
-        ::std::mem::size_of::<rte_mbuf__bindgen_ty_5>(),
-        8usize,
-        concat!("Size of: ", stringify!(rte_mbuf__bindgen_ty_5)),
-    );
-    assert_eq!(
-        ::std::mem::align_of::<rte_mbuf__bindgen_ty_5>(),
-        8usize,
-        concat!("Alignment of ", stringify!(rte_mbuf__bindgen_ty_5)),
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr).tx_offload) as usize - ptr as usize },
-        0usize,
-        concat!(
-            "Offset of field: ",
-            stringify!(rte_mbuf__bindgen_ty_5),
-            "::",
-            stringify!(tx_offload),
-        ),
-    );
-}
+#[allow(clippy::unnecessary_operation, clippy::identity_op)]
+const _: () = {
+    [
+        "Size of rte_mbuf__bindgen_ty_5",
+    ][::std::mem::size_of::<rte_mbuf__bindgen_ty_5>() - 8usize];
+    [
+        "Alignment of rte_mbuf__bindgen_ty_5",
+    ][::std::mem::align_of::<rte_mbuf__bindgen_ty_5>() - 8usize];
+    [
+        "Offset of field: rte_mbuf__bindgen_ty_5::tx_offload",
+    ][::std::mem::offset_of!(rte_mbuf__bindgen_ty_5, tx_offload) - 0usize];
+};
 impl Default for rte_mbuf__bindgen_ty_5 {
     fn default() -> Self {
         let mut s = ::std::mem::MaybeUninit::<Self>::uninit();
@@ -952,143 +1140,74 @@ impl Default for rte_mbuf__bindgen_ty_5 {
         }
     }
 }
-#[test]
-fn bindgen_test_layout_rte_mbuf() {
-    const UNINIT: ::std::mem::MaybeUninit<rte_mbuf> = ::std::mem::MaybeUninit::uninit();
-    let ptr = UNINIT.as_ptr();
-    assert_eq!(
-        ::std::mem::size_of::<rte_mbuf>(),
-        128usize,
-        concat!("Size of: ", stringify!(rte_mbuf)),
-    );
-    assert_eq!(
-        ::std::mem::align_of::<rte_mbuf>(),
-        64usize,
-        concat!("Alignment of ", stringify!(rte_mbuf)),
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr).cacheline0) as usize - ptr as usize },
-        0usize,
-        concat!("Offset of field: ", stringify!(rte_mbuf), "::", stringify!(cacheline0)),
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr).buf_addr) as usize - ptr as usize },
-        0usize,
-        concat!("Offset of field: ", stringify!(rte_mbuf), "::", stringify!(buf_addr)),
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr).buf_physaddr) as usize - ptr as usize },
-        8usize,
-        concat!(
-            "Offset of field: ",
-            stringify!(rte_mbuf),
-            "::",
-            stringify!(buf_physaddr),
-        ),
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr).buf_len) as usize - ptr as usize },
-        16usize,
-        concat!("Offset of field: ", stringify!(rte_mbuf), "::", stringify!(buf_len)),
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr).rearm_data) as usize - ptr as usize },
-        18usize,
-        concat!("Offset of field: ", stringify!(rte_mbuf), "::", stringify!(rearm_data)),
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr).data_off) as usize - ptr as usize },
-        18usize,
-        concat!("Offset of field: ", stringify!(rte_mbuf), "::", stringify!(data_off)),
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr).nb_segs) as usize - ptr as usize },
-        22usize,
-        concat!("Offset of field: ", stringify!(rte_mbuf), "::", stringify!(nb_segs)),
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr).port) as usize - ptr as usize },
-        23usize,
-        concat!("Offset of field: ", stringify!(rte_mbuf), "::", stringify!(port)),
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr).ol_flags) as usize - ptr as usize },
-        24usize,
-        concat!("Offset of field: ", stringify!(rte_mbuf), "::", stringify!(ol_flags)),
-    );
-    assert_eq!(
-        unsafe {
-            ::std::ptr::addr_of!((*ptr).rx_descriptor_fields1) as usize - ptr as usize
-        },
-        32usize,
-        concat!(
-            "Offset of field: ",
-            stringify!(rte_mbuf),
-            "::",
-            stringify!(rx_descriptor_fields1),
-        ),
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr).pkt_len) as usize - ptr as usize },
-        36usize,
-        concat!("Offset of field: ", stringify!(rte_mbuf), "::", stringify!(pkt_len)),
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr).data_len) as usize - ptr as usize },
-        40usize,
-        concat!("Offset of field: ", stringify!(rte_mbuf), "::", stringify!(data_len)),
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr).vlan_tci) as usize - ptr as usize },
-        42usize,
-        concat!("Offset of field: ", stringify!(rte_mbuf), "::", stringify!(vlan_tci)),
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr).hash) as usize - ptr as usize },
-        44usize,
-        concat!("Offset of field: ", stringify!(rte_mbuf), "::", stringify!(hash)),
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr).seqn) as usize - ptr as usize },
-        52usize,
-        concat!("Offset of field: ", stringify!(rte_mbuf), "::", stringify!(seqn)),
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr).vlan_tci_outer) as usize - ptr as usize },
-        56usize,
-        concat!(
-            "Offset of field: ",
-            stringify!(rte_mbuf),
-            "::",
-            stringify!(vlan_tci_outer),
-        ),
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr).cacheline1) as usize - ptr as usize },
-        64usize,
-        concat!("Offset of field: ", stringify!(rte_mbuf), "::", stringify!(cacheline1)),
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr).pool) as usize - ptr as usize },
-        72usize,
-        concat!("Offset of field: ", stringify!(rte_mbuf), "::", stringify!(pool)),
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr).next) as usize - ptr as usize },
-        80usize,
-        concat!("Offset of field: ", stringify!(rte_mbuf), "::", stringify!(next)),
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr).priv_size) as usize - ptr as usize },
-        96usize,
-        concat!("Offset of field: ", stringify!(rte_mbuf), "::", stringify!(priv_size)),
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr).timesync) as usize - ptr as usize },
-        98usize,
-        concat!("Offset of field: ", stringify!(rte_mbuf), "::", stringify!(timesync)),
-    );
-}
+#[allow(clippy::unnecessary_operation, clippy::identity_op)]
+const _: () = {
+    ["Size of rte_mbuf"][::std::mem::size_of::<rte_mbuf>() - 128usize];
+    ["Alignment of rte_mbuf"][::std::mem::align_of::<rte_mbuf>() - 64usize];
+    [
+        "Offset of field: rte_mbuf::cacheline0",
+    ][::std::mem::offset_of!(rte_mbuf, cacheline0) - 0usize];
+    [
+        "Offset of field: rte_mbuf::buf_addr",
+    ][::std::mem::offset_of!(rte_mbuf, buf_addr) - 0usize];
+    [
+        "Offset of field: rte_mbuf::buf_physaddr",
+    ][::std::mem::offset_of!(rte_mbuf, buf_physaddr) - 8usize];
+    [
+        "Offset of field: rte_mbuf::buf_len",
+    ][::std::mem::offset_of!(rte_mbuf, buf_len) - 16usize];
+    [
+        "Offset of field: rte_mbuf::rearm_data",
+    ][::std::mem::offset_of!(rte_mbuf, rearm_data) - 18usize];
+    [
+        "Offset of field: rte_mbuf::data_off",
+    ][::std::mem::offset_of!(rte_mbuf, data_off) - 18usize];
+    [
+        "Offset of field: rte_mbuf::nb_segs",
+    ][::std::mem::offset_of!(rte_mbuf, nb_segs) - 22usize];
+    [
+        "Offset of field: rte_mbuf::port",
+    ][::std::mem::offset_of!(rte_mbuf, port) - 23usize];
+    [
+        "Offset of field: rte_mbuf::ol_flags",
+    ][::std::mem::offset_of!(rte_mbuf, ol_flags) - 24usize];
+    [
+        "Offset of field: rte_mbuf::rx_descriptor_fields1",
+    ][::std::mem::offset_of!(rte_mbuf, rx_descriptor_fields1) - 32usize];
+    [
+        "Offset of field: rte_mbuf::pkt_len",
+    ][::std::mem::offset_of!(rte_mbuf, pkt_len) - 36usize];
+    [
+        "Offset of field: rte_mbuf::data_len",
+    ][::std::mem::offset_of!(rte_mbuf, data_len) - 40usize];
+    [
+        "Offset of field: rte_mbuf::vlan_tci",
+    ][::std::mem::offset_of!(rte_mbuf, vlan_tci) - 42usize];
+    [
+        "Offset of field: rte_mbuf::hash",
+    ][::std::mem::offset_of!(rte_mbuf, hash) - 44usize];
+    [
+        "Offset of field: rte_mbuf::seqn",
+    ][::std::mem::offset_of!(rte_mbuf, seqn) - 52usize];
+    [
+        "Offset of field: rte_mbuf::vlan_tci_outer",
+    ][::std::mem::offset_of!(rte_mbuf, vlan_tci_outer) - 56usize];
+    [
+        "Offset of field: rte_mbuf::cacheline1",
+    ][::std::mem::offset_of!(rte_mbuf, cacheline1) - 64usize];
+    [
+        "Offset of field: rte_mbuf::pool",
+    ][::std::mem::offset_of!(rte_mbuf, pool) - 72usize];
+    [
+        "Offset of field: rte_mbuf::next",
+    ][::std::mem::offset_of!(rte_mbuf, next) - 80usize];
+    [
+        "Offset of field: rte_mbuf::priv_size",
+    ][::std::mem::offset_of!(rte_mbuf, priv_size) - 96usize];
+    [
+        "Offset of field: rte_mbuf::timesync",
+    ][::std::mem::offset_of!(rte_mbuf, timesync) - 98usize];
+};
 impl Default for rte_mbuf {
     fn default() -> Self {
         let mut s = ::std::mem::MaybeUninit::<Self>::uninit();

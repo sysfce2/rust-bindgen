@@ -4,19 +4,11 @@
 pub struct Foo_empty {
     pub _address: u8,
 }
-#[test]
-fn bindgen_test_layout_Foo_empty() {
-    assert_eq!(
-        ::std::mem::size_of::<Foo_empty>(),
-        1usize,
-        concat!("Size of: ", stringify!(Foo_empty)),
-    );
-    assert_eq!(
-        ::std::mem::align_of::<Foo_empty>(),
-        1usize,
-        concat!("Alignment of ", stringify!(Foo_empty)),
-    );
-}
+#[allow(clippy::unnecessary_operation, clippy::identity_op)]
+const _: () = {
+    ["Size of Foo_empty"][::std::mem::size_of::<Foo_empty>() - 1usize];
+    ["Alignment of Foo_empty"][::std::mem::align_of::<Foo_empty>() - 1usize];
+};
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct Foo {
@@ -27,26 +19,12 @@ pub struct Foo {
 pub struct Bar {
     pub f: *mut Foo,
 }
-#[test]
-fn bindgen_test_layout_Bar() {
-    const UNINIT: ::std::mem::MaybeUninit<Bar> = ::std::mem::MaybeUninit::uninit();
-    let ptr = UNINIT.as_ptr();
-    assert_eq!(
-        ::std::mem::size_of::<Bar>(),
-        8usize,
-        concat!("Size of: ", stringify!(Bar)),
-    );
-    assert_eq!(
-        ::std::mem::align_of::<Bar>(),
-        8usize,
-        concat!("Alignment of ", stringify!(Bar)),
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr).f) as usize - ptr as usize },
-        0usize,
-        concat!("Offset of field: ", stringify!(Bar), "::", stringify!(f)),
-    );
-}
+#[allow(clippy::unnecessary_operation, clippy::identity_op)]
+const _: () = {
+    ["Size of Bar"][::std::mem::size_of::<Bar>() - 8usize];
+    ["Alignment of Bar"][::std::mem::align_of::<Bar>() - 8usize];
+    ["Offset of field: Bar::f"][::std::mem::offset_of!(Bar, f) - 0usize];
+};
 impl Default for Bar {
     fn default() -> Self {
         let mut s = ::std::mem::MaybeUninit::<Self>::uninit();
@@ -56,7 +34,7 @@ impl Default for Bar {
         }
     }
 }
-extern "C" {
+unsafe extern "C" {
     #[link_name = "\u{1}_Z10baz_structP3Foo"]
     pub fn baz_struct(f: *mut Foo);
 }
@@ -65,7 +43,7 @@ extern "C" {
 pub struct Union {
     _unused: [u8; 0],
 }
-extern "C" {
+unsafe extern "C" {
     #[link_name = "\u{1}_Z9baz_unionP5Union"]
     pub fn baz_union(u: *mut Union);
 }
@@ -74,7 +52,7 @@ extern "C" {
 pub struct Quux {
     _unused: [u8; 0],
 }
-extern "C" {
+unsafe extern "C" {
     #[link_name = "\u{1}_Z9baz_classP4Quux"]
     pub fn baz_class(q: *mut Quux);
 }

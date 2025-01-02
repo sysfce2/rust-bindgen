@@ -8,8 +8,8 @@
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct nsTArray<T> {
-    pub m: *mut T,
     pub _phantom_0: ::std::marker::PhantomData<::std::cell::UnsafeCell<T>>,
+    pub m: *mut T,
 }
 impl<T> Default for nsTArray<T> {
     fn default() -> Self {
@@ -20,6 +20,6 @@ impl<T> Default for nsTArray<T> {
         }
     }
 }
-extern "C" {
+unsafe extern "C" {
     pub fn func() -> *mut nsTArray<::std::os::raw::c_int>;
 }

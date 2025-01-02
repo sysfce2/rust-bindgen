@@ -1,9 +1,3 @@
-extern crate bindgen;
-extern crate clap;
-#[cfg(feature = "logging")]
-extern crate env_logger;
-extern crate shlex;
-
 use bindgen::{clang_version, Builder};
 use owo_colors::{OwoColorize, Style};
 use similar::{ChangeTag, TextDiff};
@@ -13,10 +7,7 @@ use std::fs;
 use std::io::{BufRead, BufReader, Error, ErrorKind, Read, Write};
 use std::path::{Path, PathBuf};
 
-use crate::options::builder_from_flags;
-
-#[path = "../../bindgen-cli/options.rs"]
-mod options;
+use bindgen::builder_from_flags;
 
 mod parse_callbacks;
 
@@ -35,9 +26,10 @@ fn should_overwrite_expected() -> bool {
         if var == "1" {
             return true;
         }
-        if var != "0" && var != "" {
-            panic!("Invalid value of BINDGEN_OVERWRITE_EXPECTED");
-        }
+        assert!(
+            var == "0" || var == "",
+            "Invalid value of BINDGEN_OVERWRITE_EXPECTED"
+        );
     }
     false
 }
@@ -49,9 +41,9 @@ fn error_diff_mismatch(
     filename: &Path,
 ) -> Result<(), Error> {
     println!("diff expected generated");
-    println!("--- expected: {:?}", filename);
+    println!("--- expected: {filename:?}");
     if let Some(header) = header {
-        println!("+++ generated from: {:?}", header);
+        println!("+++ generated from: {header:?}");
     }
 
     show_diff(expected, actual);
@@ -64,9 +56,10 @@ fn error_diff_mismatch(
 
     if let Some(var) = env::var_os("BINDGEN_TESTS_DIFFTOOL") {
         //usecase: var = "meld" -> You can hand check differences
-        let name = match filename.components().last() {
-            Some(std::path::Component::Normal(name)) => name,
-            _ => panic!("Why is the header variable so weird?"),
+        let Some(std::path::Component::Normal(name)) =
+            filename.components().last()
+        else {
+            panic!("Why is the header variable so weird?")
         };
         let actual_result_path =
             PathBuf::from(env::var("OUT_DIR").unwrap()).join(name);
@@ -148,25 +141,23 @@ fn compare_generated_header(
     {
         let mut expectation = expectation.clone();
 
-        if cfg!(feature = "__testing_only_libclang_9") {
+        if cfg!(feature = "__testing_only_libclang_16") {
+            expectation.push("libclang-16");
+        } else if cfg!(feature = "__testing_only_libclang_9") {
             expectation.push("libclang-9");
-        } else if cfg!(feature = "__testing_only_libclang_5") {
-            expectation.push("libclang-5");
         } else {
             match clang_version().parsed {
-                None => expectation.push("libclang-9"),
+                None => expectation.push("libclang-16"),
                 Some(version) => {
                     let (maj, min) = version;
-                    let version_str = if maj >= 9 {
+                    let version_str = if maj >= 16 {
+                        "16".to_owned()
+                    } else if maj >= 9 {
                         "9".to_owned()
-                    } else if maj >= 5 {
-                        "5".to_owned()
-                    } else if maj >= 4 {
-                        "4".to_owned()
                     } else {
-                        format!("{}.{}", maj, min)
+                        format!("{maj}.{min}")
                     };
-                    expectation.push(format!("libclang-{}", version_str));
+                    expectation.push(format!("libclang-{version_str}"));
                 }
             }
         }
@@ -205,7 +196,7 @@ fn compare_generated_header(
         Ok(bindings) => format_code(bindings.to_string()).map_err(|err| {
             Error::new(
                 ErrorKind::Other,
-                format!("Cannot parse the generated bindings: {}", err),
+                format!("Cannot parse the generated bindings: {err}"),
             )
         })?,
         Err(_) => "/* error generating bindings */\n".into(),
@@ -230,7 +221,7 @@ fn compare_generated_header(
         if let Err(e) =
             compare_generated_header(header, roundtrip_builder, false)
         {
-            return Err(Error::new(ErrorKind::Other, format!("Checking CLI flags roundtrip errored! You probably need to fix Builder::command_line_flags. {}", e)));
+            return Err(Error::new(ErrorKind::Other, format!("Checking CLI flags roundtrip errored! You probably need to fix Builder::command_line_flags. {e}")));
         }
     }
 
@@ -370,7 +361,7 @@ macro_rules! test_header {
             });
 
             if let Err(err) = result {
-                panic!("{}", err);
+                panic!("{err}");
             }
         }
     };
@@ -382,7 +373,7 @@ include!(concat!(env!("OUT_DIR"), "/tests.rs"));
 #[test]
 #[cfg_attr(target_os = "windows", ignore)]
 fn test_clang_env_args() {
-    std::env::set_var(
+    env::set_var(
         "BINDGEN_EXTRA_CLANG_ARGS",
         "-D_ENV_ONE=1 -D_ENV_TWO=\"2 -DNOT_THREE=1\"",
     );
@@ -392,7 +383,7 @@ fn test_clang_env_args() {
             "test.hpp",
             "#ifdef _ENV_ONE\nextern const int x[] = { 42 };\n#endif\n\
              #ifdef _ENV_TWO\nextern const int y[] = { 42 };\n#endif\n\
-             #ifdef NOT_THREE\nextern const int z[] = { 42 };\n#endif\n",
+             #if defined NOT_THREE && NOT_THREE == 1\nextern const int z[] = { 42 };\n#endif\n",
         )
         .generate()
         .unwrap()
@@ -401,10 +392,10 @@ fn test_clang_env_args() {
     let actual = format_code(actual).unwrap();
 
     let expected = format_code(
-        "extern \"C\" {
+        "unsafe extern \"C\" {
     pub static x: [::std::os::raw::c_int; 1usize];
 }
-extern \"C\" {
+unsafe extern \"C\" {
     pub static y: [::std::os::raw::c_int; 1usize];
 }
 ",
@@ -427,7 +418,7 @@ fn test_header_contents() {
     let actual = format_code(actual).unwrap();
 
     let expected = format_code(
-        "extern \"C\" {
+        "unsafe extern \"C\" {
     pub fn foo(a: *const ::std::os::raw::c_char) -> ::std::os::raw::c_int;
 }
 ",
@@ -475,6 +466,42 @@ fn test_multiple_header_calls_in_builder() {
 }
 
 #[test]
+fn test_headers_call_in_builder() {
+    let actual = builder()
+        .headers([
+            concat!(env!("CARGO_MANIFEST_DIR"), "/tests/headers/func_ptr.h"),
+            concat!(env!("CARGO_MANIFEST_DIR"), "/tests/headers/char.h"),
+        ])
+        .clang_arg("--target=x86_64-unknown-linux")
+        .generate()
+        .unwrap()
+        .to_string();
+
+    let actual = format_code(actual).unwrap();
+
+    let expected_filename = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/expectations/tests/test_multiple_header_calls_in_builder.rs"
+    );
+    let expected = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/expectations/tests/test_multiple_header_calls_in_builder.rs"
+    ));
+    let expected = format_code(expected).unwrap();
+
+    if actual != expected {
+        println!("Generated bindings differ from expected!");
+        error_diff_mismatch(
+            &actual,
+            &expected,
+            None,
+            Path::new(expected_filename),
+        )
+        .unwrap();
+    }
+}
+
+#[test]
 fn test_multiple_header_contents() {
     let actual = builder()
         .header_contents("test.h", "int foo(const char* a);")
@@ -487,10 +514,10 @@ fn test_multiple_header_contents() {
     let actual = format_code(actual).unwrap();
 
     let expected = format_code(
-        "extern \"C\" {
+        "unsafe extern \"C\" {
     pub fn foo2(b: *const ::std::os::raw::c_char) -> f32;
 }
-extern \"C\" {
+unsafe extern \"C\" {
     pub fn foo(a: *const ::std::os::raw::c_char) -> ::std::os::raw::c_int;
 }
 ",
@@ -525,6 +552,60 @@ fn test_mixed_header_and_header_contents() {
         env!("CARGO_MANIFEST_DIR"),
         "/tests/expectations/tests/test_mixed_header_and_header_contents.rs"
     ));
+    let expected = format_code(expected).unwrap();
+    if expected != actual {
+        error_diff_mismatch(
+            &actual,
+            &expected,
+            None,
+            Path::new(expected_filename),
+        )
+        .unwrap();
+    }
+}
+
+#[test]
+fn test_macro_fallback_non_system_dir() {
+    let actual = builder()
+        .header(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/macro_fallback_test_headers/one_header.h"
+        ))
+        .header(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/macro_fallback_test_headers/another_header.h"
+        ))
+        .clang_macro_fallback()
+        .clang_arg(format!("-I{}/tests/headers", env!("CARGO_MANIFEST_DIR")))
+        .generate()
+        .unwrap()
+        .to_string();
+
+    let actual = format_code(actual).unwrap();
+
+    let (expected_filename, expected) = if let Some((9, _)) =
+        clang_version().parsed
+    {
+        let expected_filename = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/expectations/tests/libclang-9/macro_fallback_non_system_dir.rs",
+        );
+        let expected = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/expectations/tests/libclang-9/macro_fallback_non_system_dir.rs",
+        ));
+        (expected_filename, expected)
+    } else {
+        let expected_filename = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/expectations/tests/test_macro_fallback_non_system_dir.rs",
+        );
+        let expected = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/expectations/tests/test_macro_fallback_non_system_dir.rs",
+        ));
+        (expected_filename, expected)
+    };
     let expected = format_code(expected).unwrap();
     if expected != actual {
         error_diff_mismatch(
@@ -573,8 +654,8 @@ fn emit_depfile() {
         builder.into_builder(check_roundtrip).unwrap();
     let _bindings = builder.generate().unwrap();
 
-    let observed = std::fs::read_to_string(observed_depfile).unwrap();
-    let expected = std::fs::read_to_string(expected_depfile).unwrap();
+    let observed = fs::read_to_string(observed_depfile).unwrap();
+    let expected = fs::read_to_string(expected_depfile).unwrap();
     assert_eq!(observed.trim(), expected.trim());
 }
 
@@ -614,26 +695,25 @@ fn dump_preprocessed_input() {
     );
 }
 
-fn build_flags_output_helper(builder: &bindgen::Builder) {
+fn build_flags_output_helper(builder: &Builder) {
     let mut command_line_flags = builder.command_line_flags();
     command_line_flags.insert(0, "bindgen".to_string());
 
     let flags_quoted: Vec<String> = command_line_flags
         .iter()
-        .map(|x| format!("{}", shlex::quote(x)))
+        .map(|x| format!("{}", shlex::try_quote(x).unwrap()))
         .collect();
     let flags_str = flags_quoted.join(" ");
-    println!("{}", flags_str);
+    println!("{flags_str}");
 
     let (builder, _output, _verbose) =
-        crate::options::builder_from_flags(command_line_flags.into_iter())
-            .unwrap();
+        builder_from_flags(command_line_flags.into_iter()).unwrap();
     builder.generate().expect("failed to generate bindings");
 }
 
 #[test]
 fn commandline_multiple_headers() {
-    let bindings = bindgen::Builder::default()
+    let bindings = Builder::default()
         .header("tests/headers/char.h")
         .header("tests/headers/func_ptr.h")
         .header("tests/headers/16-byte-alignment.h");

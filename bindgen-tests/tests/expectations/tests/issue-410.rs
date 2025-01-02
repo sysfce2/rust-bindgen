@@ -11,20 +11,12 @@ pub mod root {
         pub struct Value {
             pub _address: u8,
         }
-        #[test]
-        fn bindgen_test_layout_Value() {
-            assert_eq!(
-                ::std::mem::size_of::<Value>(),
-                1usize,
-                concat!("Size of: ", stringify!(Value)),
-            );
-            assert_eq!(
-                ::std::mem::align_of::<Value>(),
-                1usize,
-                concat!("Alignment of ", stringify!(Value)),
-            );
-        }
-        extern "C" {
+        #[allow(clippy::unnecessary_operation, clippy::identity_op)]
+        const _: () = {
+            ["Size of Value"][::std::mem::size_of::<Value>() - 1usize];
+            ["Alignment of Value"][::std::mem::align_of::<Value>() - 1usize];
+        };
+        unsafe extern "C" {
             #[link_name = "\u{1}_ZN2JS5Value1aE10JSWhyMagic"]
             pub fn Value_a(this: *mut root::JS::Value, arg1: root::JSWhyMagic);
         }

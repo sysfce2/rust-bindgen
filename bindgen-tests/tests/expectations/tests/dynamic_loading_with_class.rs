@@ -4,31 +4,21 @@
 pub struct A {
     pub _x: ::std::os::raw::c_int,
 }
-#[test]
-fn bindgen_test_layout_A() {
-    const UNINIT: ::std::mem::MaybeUninit<A> = ::std::mem::MaybeUninit::uninit();
-    let ptr = UNINIT.as_ptr();
-    assert_eq!(::std::mem::size_of::<A>(), 4usize, concat!("Size of: ", stringify!(A)));
-    assert_eq!(
-        ::std::mem::align_of::<A>(),
-        4usize,
-        concat!("Alignment of ", stringify!(A)),
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr)._x) as usize - ptr as usize },
-        0usize,
-        concat!("Offset of field: ", stringify!(A), "::", stringify!(_x)),
-    );
-}
-extern "C" {
+#[allow(clippy::unnecessary_operation, clippy::identity_op)]
+const _: () = {
+    ["Size of A"][::std::mem::size_of::<A>() - 4usize];
+    ["Alignment of A"][::std::mem::align_of::<A>() - 4usize];
+    ["Offset of field: A::_x"][::std::mem::offset_of!(A, _x) - 0usize];
+};
+unsafe extern "C" {
     #[link_name = "\u{1}_ZN1A13some_functionEv"]
     pub fn A_some_function(this: *mut A);
 }
-extern "C" {
+unsafe extern "C" {
     #[link_name = "\u{1}_ZN1A19some_other_functionEv"]
     pub fn A_some_other_function(this: *mut A);
 }
-extern "C" {
+unsafe extern "C" {
     #[link_name = "\u{1}_ZN1AC1Ei"]
     pub fn A_A(this: *mut A, x: ::std::os::raw::c_int);
 }
@@ -48,7 +38,6 @@ impl A {
         __bindgen_tmp.assume_init()
     }
 }
-extern crate libloading;
 pub struct TestLib {
     __library: ::libloading::Library,
     pub foo: Result<

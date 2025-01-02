@@ -2,16 +2,8 @@
 #[repr(C)]
 #[derive(Debug, Default, Copy, Clone)]
 pub struct Foo {}
-#[test]
-fn bindgen_test_layout_Foo() {
-    assert_eq!(
-        ::std::mem::size_of::<Foo>(),
-        0usize,
-        concat!("Size of: ", stringify!(Foo)),
-    );
-    assert_eq!(
-        ::std::mem::align_of::<Foo>(),
-        1usize,
-        concat!("Alignment of ", stringify!(Foo)),
-    );
-}
+#[allow(clippy::unnecessary_operation, clippy::identity_op)]
+const _: () = {
+    ["Size of Foo"][::std::mem::size_of::<Foo>() - 0usize];
+    ["Alignment of Foo"][::std::mem::align_of::<Foo>() - 1usize];
+};

@@ -5,26 +5,14 @@ pub type c = nsTArray;
 pub struct nsTArray_base {
     pub d: *mut ::std::os::raw::c_int,
 }
-#[test]
-fn bindgen_test_layout_nsTArray_base() {
-    const UNINIT: ::std::mem::MaybeUninit<nsTArray_base> = ::std::mem::MaybeUninit::uninit();
-    let ptr = UNINIT.as_ptr();
-    assert_eq!(
-        ::std::mem::size_of::<nsTArray_base>(),
-        8usize,
-        concat!("Size of: ", stringify!(nsTArray_base)),
-    );
-    assert_eq!(
-        ::std::mem::align_of::<nsTArray_base>(),
-        8usize,
-        concat!("Alignment of ", stringify!(nsTArray_base)),
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr).d) as usize - ptr as usize },
-        0usize,
-        concat!("Offset of field: ", stringify!(nsTArray_base), "::", stringify!(d)),
-    );
-}
+#[allow(clippy::unnecessary_operation, clippy::identity_op)]
+const _: () = {
+    ["Size of nsTArray_base"][::std::mem::size_of::<nsTArray_base>() - 8usize];
+    ["Alignment of nsTArray_base"][::std::mem::align_of::<nsTArray_base>() - 8usize];
+    [
+        "Offset of field: nsTArray_base::d",
+    ][::std::mem::offset_of!(nsTArray_base, d) - 0usize];
+};
 impl Default for nsTArray_base {
     fn default() -> Self {
         let mut s = ::std::mem::MaybeUninit::<Self>::uninit();
@@ -53,26 +41,14 @@ impl Default for nsTArray {
 pub struct nsIContent {
     pub foo: nsTArray,
 }
-#[test]
-fn bindgen_test_layout_nsIContent() {
-    const UNINIT: ::std::mem::MaybeUninit<nsIContent> = ::std::mem::MaybeUninit::uninit();
-    let ptr = UNINIT.as_ptr();
-    assert_eq!(
-        ::std::mem::size_of::<nsIContent>(),
-        8usize,
-        concat!("Size of: ", stringify!(nsIContent)),
-    );
-    assert_eq!(
-        ::std::mem::align_of::<nsIContent>(),
-        8usize,
-        concat!("Alignment of ", stringify!(nsIContent)),
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr).foo) as usize - ptr as usize },
-        0usize,
-        concat!("Offset of field: ", stringify!(nsIContent), "::", stringify!(foo)),
-    );
-}
+#[allow(clippy::unnecessary_operation, clippy::identity_op)]
+const _: () = {
+    ["Size of nsIContent"][::std::mem::size_of::<nsIContent>() - 8usize];
+    ["Alignment of nsIContent"][::std::mem::align_of::<nsIContent>() - 8usize];
+    [
+        "Offset of field: nsIContent::foo",
+    ][::std::mem::offset_of!(nsIContent, foo) - 0usize];
+};
 impl Default for nsIContent {
     fn default() -> Self {
         let mut s = ::std::mem::MaybeUninit::<Self>::uninit();
@@ -82,33 +58,25 @@ impl Default for nsIContent {
         }
     }
 }
-extern "C" {
+unsafe extern "C" {
     #[link_name = "\u{1}_Z35Gecko_GetAnonymousContentForElementv"]
     pub fn Gecko_GetAnonymousContentForElement() -> *mut nsTArray;
 }
-#[test]
-fn __bindgen_test_layout_nsTArray_open0_ptr_nsIContent_close0_instantiation() {
-    assert_eq!(
-        ::std::mem::size_of::<nsTArray>(),
-        8usize,
-        concat!("Size of template specialization: ", stringify!(nsTArray)),
-    );
-    assert_eq!(
-        ::std::mem::align_of::<nsTArray>(),
-        8usize,
-        concat!("Alignment of template specialization: ", stringify!(nsTArray)),
-    );
-}
-#[test]
-fn __bindgen_test_layout_nsTArray_open0_ptr_nsIContent_close0_instantiation_1() {
-    assert_eq!(
-        ::std::mem::size_of::<nsTArray>(),
-        8usize,
-        concat!("Size of template specialization: ", stringify!(nsTArray)),
-    );
-    assert_eq!(
-        ::std::mem::align_of::<nsTArray>(),
-        8usize,
-        concat!("Alignment of template specialization: ", stringify!(nsTArray)),
-    );
-}
+#[allow(clippy::unnecessary_operation, clippy::identity_op)]
+const _: () = {
+    [
+        "Size of template specialization: nsTArray_open0_ptr_nsIContent_close0",
+    ][::std::mem::size_of::<nsTArray>() - 8usize];
+    [
+        "Align of template specialization: nsTArray_open0_ptr_nsIContent_close0",
+    ][::std::mem::align_of::<nsTArray>() - 8usize];
+};
+#[allow(clippy::unnecessary_operation, clippy::identity_op)]
+const _: () = {
+    [
+        "Size of template specialization: nsTArray_open0_ptr_nsIContent_close0",
+    ][::std::mem::size_of::<nsTArray>() - 8usize];
+    [
+        "Align of template specialization: nsTArray_open0_ptr_nsIContent_close0",
+    ][::std::mem::align_of::<nsTArray>() - 8usize];
+};

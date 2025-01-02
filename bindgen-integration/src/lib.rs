@@ -12,7 +12,6 @@ use std::ffi::CStr;
 use std::mem;
 use std::os::raw::c_int;
 
-#[allow(unused)]
 use bindings::testing::Bar; // This type is generated from module_raw_line.
 
 type MacroInteger = isize;
@@ -255,12 +254,12 @@ fn test_item_rename() {
 #[test]
 fn test_matching_with_rename() {
     assert_eq!(bindings::enum_to_be_constified_THREE, 3);
-    assert_eq!(unsafe { bindings::TEMPLATED_CONST_VALUE.len() }, 30);
+    assert_eq!(unsafe { bindings::TEMPLATED_CONST_VALUE.0.len() }, 30);
 }
 
 #[test]
 fn test_macro_customintkind_path() {
-    let v: &std::any::Any = &bindings::TESTMACRO_CUSTOMINTKIND_PATH;
+    let v: &dyn std::any::Any = &bindings::TESTMACRO_CUSTOMINTKIND_PATH;
     assert!(v.is::<MacroInteger>())
 }
 
@@ -289,6 +288,22 @@ fn test_custom_derive() {
 
     assert!(meter < lightyear);
     assert!(meter > micron);
+
+    // The `add_derives` callback should have added `#[derive(PartialEq, PartialOrd)]`
+    // to the `TestDeriveOnAlias` new-type alias. If it didn't, this will fail to compile.
+    let test1 = unsafe { bindings::TestDeriveOnAlias(5) };
+    let test2 = unsafe { bindings::TestDeriveOnAlias(6) };
+    assert!(test1 < test2);
+    assert!(!(test1 > test2));
+}
+
+#[test]
+fn test_custom_attributes() {
+    // The `add_attributes` callback should have added `#[cfg_attr(test, derive(PartialOrd))])`
+    // to the `Test` struct. If it didn't, this will fail to compile.
+    let test1 = unsafe { bindings::Test::new(5) };
+    let test2 = unsafe { bindings::Test::new(6) };
+    assert!(test1 < test2);
 }
 
 #[test]

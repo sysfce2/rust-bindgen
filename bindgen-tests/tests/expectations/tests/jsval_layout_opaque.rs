@@ -15,10 +15,7 @@ where
     Storage: AsRef<[u8]> + AsMut<[u8]>,
 {
     #[inline]
-    pub fn get_bit(&self, index: usize) -> bool {
-        debug_assert!(index / 8 < self.storage.as_ref().len());
-        let byte_index = index / 8;
-        let byte = self.storage.as_ref()[byte_index];
+    fn extract_bit(byte: u8, index: usize) -> bool {
         let bit_index = if cfg!(target_endian = "big") {
             7 - (index % 8)
         } else {
@@ -28,21 +25,44 @@ where
         byte & mask == mask
     }
     #[inline]
-    pub fn set_bit(&mut self, index: usize, val: bool) {
+    pub fn get_bit(&self, index: usize) -> bool {
         debug_assert!(index / 8 < self.storage.as_ref().len());
         let byte_index = index / 8;
-        let byte = &mut self.storage.as_mut()[byte_index];
+        let byte = self.storage.as_ref()[byte_index];
+        Self::extract_bit(byte, index)
+    }
+    #[inline]
+    pub unsafe fn raw_get_bit(this: *const Self, index: usize) -> bool {
+        debug_assert!(index / 8 < core::mem::size_of::<Storage>());
+        let byte_index = index / 8;
+        let byte = *(core::ptr::addr_of!((*this).storage) as *const u8)
+            .offset(byte_index as isize);
+        Self::extract_bit(byte, index)
+    }
+    #[inline]
+    fn change_bit(byte: u8, index: usize, val: bool) -> u8 {
         let bit_index = if cfg!(target_endian = "big") {
             7 - (index % 8)
         } else {
             index % 8
         };
         let mask = 1 << bit_index;
-        if val {
-            *byte |= mask;
-        } else {
-            *byte &= !mask;
-        }
+        if val { byte | mask } else { byte & !mask }
+    }
+    #[inline]
+    pub fn set_bit(&mut self, index: usize, val: bool) {
+        debug_assert!(index / 8 < self.storage.as_ref().len());
+        let byte_index = index / 8;
+        let byte = &mut self.storage.as_mut()[byte_index];
+        *byte = Self::change_bit(*byte, index, val);
+    }
+    #[inline]
+    pub unsafe fn raw_set_bit(this: *mut Self, index: usize, val: bool) {
+        debug_assert!(index / 8 < core::mem::size_of::<Storage>());
+        let byte_index = index / 8;
+        let byte = (core::ptr::addr_of_mut!((*this).storage) as *mut u8)
+            .offset(byte_index as isize);
+        *byte = Self::change_bit(*byte, index, val);
     }
     #[inline]
     pub fn get(&self, bit_offset: usize, bit_width: u8) -> u64 {
@@ -54,6 +74,26 @@ where
         let mut val = 0;
         for i in 0..(bit_width as usize) {
             if self.get_bit(i + bit_offset) {
+                let index = if cfg!(target_endian = "big") {
+                    bit_width as usize - 1 - i
+                } else {
+                    i
+                };
+                val |= 1 << index;
+            }
+        }
+        val
+    }
+    #[inline]
+    pub unsafe fn raw_get(this: *const Self, bit_offset: usize, bit_width: u8) -> u64 {
+        debug_assert!(bit_width <= 64);
+        debug_assert!(bit_offset / 8 < core::mem::size_of::<Storage>());
+        debug_assert!(
+            (bit_offset + (bit_width as usize)) / 8 <= core::mem::size_of::<Storage>(),
+        );
+        let mut val = 0;
+        for i in 0..(bit_width as usize) {
+            if Self::raw_get_bit(this, i + bit_offset) {
                 let index = if cfg!(target_endian = "big") {
                     bit_width as usize - 1 - i
                 } else {
@@ -80,6 +120,24 @@ where
                 i
             };
             self.set_bit(index + bit_offset, val_bit_is_set);
+        }
+    }
+    #[inline]
+    pub unsafe fn raw_set(this: *mut Self, bit_offset: usize, bit_width: u8, val: u64) {
+        debug_assert!(bit_width <= 64);
+        debug_assert!(bit_offset / 8 < core::mem::size_of::<Storage>());
+        debug_assert!(
+            (bit_offset + (bit_width as usize)) / 8 <= core::mem::size_of::<Storage>(),
+        );
+        for i in 0..(bit_width as usize) {
+            let mask = 1 << i;
+            let val_bit_is_set = val & mask == mask;
+            let index = if cfg!(target_endian = "big") {
+                bit_width as usize - 1 - i
+            } else {
+                i
+            };
+            Self::raw_set_bit(this, index + bit_offset, val_bit_is_set);
         }
     }
 }
@@ -186,19 +244,15 @@ pub struct jsval_layout__bindgen_ty_1 {
     pub _bitfield_align_1: [u64; 0],
     pub _bitfield_1: __BindgenBitfieldUnit<[u8; 8usize]>,
 }
-#[test]
-fn bindgen_test_layout_jsval_layout__bindgen_ty_1() {
-    assert_eq!(
-        ::std::mem::size_of::<jsval_layout__bindgen_ty_1>(),
-        8usize,
-        concat!("Size of: ", stringify!(jsval_layout__bindgen_ty_1)),
-    );
-    assert_eq!(
-        ::std::mem::align_of::<jsval_layout__bindgen_ty_1>(),
-        8usize,
-        concat!("Alignment of ", stringify!(jsval_layout__bindgen_ty_1)),
-    );
-}
+#[allow(clippy::unnecessary_operation, clippy::identity_op)]
+const _: () = {
+    [
+        "Size of jsval_layout__bindgen_ty_1",
+    ][::std::mem::size_of::<jsval_layout__bindgen_ty_1>() - 8usize];
+    [
+        "Alignment of jsval_layout__bindgen_ty_1",
+    ][::std::mem::align_of::<jsval_layout__bindgen_ty_1>() - 8usize];
+};
 impl Default for jsval_layout__bindgen_ty_1 {
     fn default() -> Self {
         let mut s = ::std::mem::MaybeUninit::<Self>::uninit();
@@ -221,6 +275,31 @@ impl jsval_layout__bindgen_ty_1 {
         }
     }
     #[inline]
+    pub unsafe fn payload47_raw(this: *const Self) -> u64 {
+        unsafe {
+            ::std::mem::transmute(
+                <__BindgenBitfieldUnit<
+                    [u8; 8usize],
+                >>::raw_get(::std::ptr::addr_of!((*this)._bitfield_1), 0usize, 47u8)
+                    as u64,
+            )
+        }
+    }
+    #[inline]
+    pub unsafe fn set_payload47_raw(this: *mut Self, val: u64) {
+        unsafe {
+            let val: u64 = ::std::mem::transmute(val);
+            <__BindgenBitfieldUnit<
+                [u8; 8usize],
+            >>::raw_set(
+                ::std::ptr::addr_of_mut!((*this)._bitfield_1),
+                0usize,
+                47u8,
+                val as u64,
+            )
+        }
+    }
+    #[inline]
     pub fn tag(&self) -> JSValueTag {
         unsafe { ::std::mem::transmute(self._bitfield_1.get(47usize, 17u8) as u32) }
     }
@@ -229,6 +308,31 @@ impl jsval_layout__bindgen_ty_1 {
         unsafe {
             let val: u32 = ::std::mem::transmute(val);
             self._bitfield_1.set(47usize, 17u8, val as u64)
+        }
+    }
+    #[inline]
+    pub unsafe fn tag_raw(this: *const Self) -> JSValueTag {
+        unsafe {
+            ::std::mem::transmute(
+                <__BindgenBitfieldUnit<
+                    [u8; 8usize],
+                >>::raw_get(::std::ptr::addr_of!((*this)._bitfield_1), 47usize, 17u8)
+                    as u32,
+            )
+        }
+    }
+    #[inline]
+    pub unsafe fn set_tag_raw(this: *mut Self, val: JSValueTag) {
+        unsafe {
+            let val: u32 = ::std::mem::transmute(val);
+            <__BindgenBitfieldUnit<
+                [u8; 8usize],
+            >>::raw_set(
+                ::std::ptr::addr_of_mut!((*this)._bitfield_1),
+                47usize,
+                17u8,
+                val as u64,
+            )
         }
     }
     #[inline]
@@ -270,51 +374,24 @@ pub union jsval_layout__bindgen_ty_2__bindgen_ty_1 {
     pub u32_: u32,
     pub why: JSWhyMagic,
 }
-#[test]
-fn bindgen_test_layout_jsval_layout__bindgen_ty_2__bindgen_ty_1() {
-    const UNINIT: ::std::mem::MaybeUninit<jsval_layout__bindgen_ty_2__bindgen_ty_1> = ::std::mem::MaybeUninit::uninit();
-    let ptr = UNINIT.as_ptr();
-    assert_eq!(
-        ::std::mem::size_of::<jsval_layout__bindgen_ty_2__bindgen_ty_1>(),
-        4usize,
-        concat!("Size of: ", stringify!(jsval_layout__bindgen_ty_2__bindgen_ty_1)),
-    );
-    assert_eq!(
-        ::std::mem::align_of::<jsval_layout__bindgen_ty_2__bindgen_ty_1>(),
-        4usize,
-        concat!("Alignment of ", stringify!(jsval_layout__bindgen_ty_2__bindgen_ty_1)),
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr).i32_) as usize - ptr as usize },
-        0usize,
-        concat!(
-            "Offset of field: ",
-            stringify!(jsval_layout__bindgen_ty_2__bindgen_ty_1),
-            "::",
-            stringify!(i32_),
-        ),
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr).u32_) as usize - ptr as usize },
-        0usize,
-        concat!(
-            "Offset of field: ",
-            stringify!(jsval_layout__bindgen_ty_2__bindgen_ty_1),
-            "::",
-            stringify!(u32_),
-        ),
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr).why) as usize - ptr as usize },
-        0usize,
-        concat!(
-            "Offset of field: ",
-            stringify!(jsval_layout__bindgen_ty_2__bindgen_ty_1),
-            "::",
-            stringify!(why),
-        ),
-    );
-}
+#[allow(clippy::unnecessary_operation, clippy::identity_op)]
+const _: () = {
+    [
+        "Size of jsval_layout__bindgen_ty_2__bindgen_ty_1",
+    ][::std::mem::size_of::<jsval_layout__bindgen_ty_2__bindgen_ty_1>() - 4usize];
+    [
+        "Alignment of jsval_layout__bindgen_ty_2__bindgen_ty_1",
+    ][::std::mem::align_of::<jsval_layout__bindgen_ty_2__bindgen_ty_1>() - 4usize];
+    [
+        "Offset of field: jsval_layout__bindgen_ty_2__bindgen_ty_1::i32_",
+    ][::std::mem::offset_of!(jsval_layout__bindgen_ty_2__bindgen_ty_1, i32_) - 0usize];
+    [
+        "Offset of field: jsval_layout__bindgen_ty_2__bindgen_ty_1::u32_",
+    ][::std::mem::offset_of!(jsval_layout__bindgen_ty_2__bindgen_ty_1, u32_) - 0usize];
+    [
+        "Offset of field: jsval_layout__bindgen_ty_2__bindgen_ty_1::why",
+    ][::std::mem::offset_of!(jsval_layout__bindgen_ty_2__bindgen_ty_1, why) - 0usize];
+};
 impl Default for jsval_layout__bindgen_ty_2__bindgen_ty_1 {
     fn default() -> Self {
         let mut s = ::std::mem::MaybeUninit::<Self>::uninit();
@@ -324,31 +401,18 @@ impl Default for jsval_layout__bindgen_ty_2__bindgen_ty_1 {
         }
     }
 }
-#[test]
-fn bindgen_test_layout_jsval_layout__bindgen_ty_2() {
-    const UNINIT: ::std::mem::MaybeUninit<jsval_layout__bindgen_ty_2> = ::std::mem::MaybeUninit::uninit();
-    let ptr = UNINIT.as_ptr();
-    assert_eq!(
-        ::std::mem::size_of::<jsval_layout__bindgen_ty_2>(),
-        4usize,
-        concat!("Size of: ", stringify!(jsval_layout__bindgen_ty_2)),
-    );
-    assert_eq!(
-        ::std::mem::align_of::<jsval_layout__bindgen_ty_2>(),
-        4usize,
-        concat!("Alignment of ", stringify!(jsval_layout__bindgen_ty_2)),
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr).payload) as usize - ptr as usize },
-        0usize,
-        concat!(
-            "Offset of field: ",
-            stringify!(jsval_layout__bindgen_ty_2),
-            "::",
-            stringify!(payload),
-        ),
-    );
-}
+#[allow(clippy::unnecessary_operation, clippy::identity_op)]
+const _: () = {
+    [
+        "Size of jsval_layout__bindgen_ty_2",
+    ][::std::mem::size_of::<jsval_layout__bindgen_ty_2>() - 4usize];
+    [
+        "Alignment of jsval_layout__bindgen_ty_2",
+    ][::std::mem::align_of::<jsval_layout__bindgen_ty_2>() - 4usize];
+    [
+        "Offset of field: jsval_layout__bindgen_ty_2::payload",
+    ][::std::mem::offset_of!(jsval_layout__bindgen_ty_2, payload) - 0usize];
+};
 impl Default for jsval_layout__bindgen_ty_2 {
     fn default() -> Self {
         let mut s = ::std::mem::MaybeUninit::<Self>::uninit();
@@ -358,71 +422,32 @@ impl Default for jsval_layout__bindgen_ty_2 {
         }
     }
 }
-#[test]
-fn bindgen_test_layout_jsval_layout() {
-    const UNINIT: ::std::mem::MaybeUninit<jsval_layout> = ::std::mem::MaybeUninit::uninit();
-    let ptr = UNINIT.as_ptr();
-    assert_eq!(
-        ::std::mem::size_of::<jsval_layout>(),
-        8usize,
-        concat!("Size of: ", stringify!(jsval_layout)),
-    );
-    assert_eq!(
-        ::std::mem::align_of::<jsval_layout>(),
-        8usize,
-        concat!("Alignment of ", stringify!(jsval_layout)),
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr).asBits) as usize - ptr as usize },
-        0usize,
-        concat!("Offset of field: ", stringify!(jsval_layout), "::", stringify!(asBits)),
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr).debugView) as usize - ptr as usize },
-        0usize,
-        concat!(
-            "Offset of field: ",
-            stringify!(jsval_layout),
-            "::",
-            stringify!(debugView),
-        ),
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr).s) as usize - ptr as usize },
-        0usize,
-        concat!("Offset of field: ", stringify!(jsval_layout), "::", stringify!(s)),
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr).asDouble) as usize - ptr as usize },
-        0usize,
-        concat!(
-            "Offset of field: ",
-            stringify!(jsval_layout),
-            "::",
-            stringify!(asDouble),
-        ),
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr).asPtr) as usize - ptr as usize },
-        0usize,
-        concat!("Offset of field: ", stringify!(jsval_layout), "::", stringify!(asPtr)),
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr).asWord) as usize - ptr as usize },
-        0usize,
-        concat!("Offset of field: ", stringify!(jsval_layout), "::", stringify!(asWord)),
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr).asUIntPtr) as usize - ptr as usize },
-        0usize,
-        concat!(
-            "Offset of field: ",
-            stringify!(jsval_layout),
-            "::",
-            stringify!(asUIntPtr),
-        ),
-    );
-}
+#[allow(clippy::unnecessary_operation, clippy::identity_op)]
+const _: () = {
+    ["Size of jsval_layout"][::std::mem::size_of::<jsval_layout>() - 8usize];
+    ["Alignment of jsval_layout"][::std::mem::align_of::<jsval_layout>() - 8usize];
+    [
+        "Offset of field: jsval_layout::asBits",
+    ][::std::mem::offset_of!(jsval_layout, asBits) - 0usize];
+    [
+        "Offset of field: jsval_layout::debugView",
+    ][::std::mem::offset_of!(jsval_layout, debugView) - 0usize];
+    [
+        "Offset of field: jsval_layout::s",
+    ][::std::mem::offset_of!(jsval_layout, s) - 0usize];
+    [
+        "Offset of field: jsval_layout::asDouble",
+    ][::std::mem::offset_of!(jsval_layout, asDouble) - 0usize];
+    [
+        "Offset of field: jsval_layout::asPtr",
+    ][::std::mem::offset_of!(jsval_layout, asPtr) - 0usize];
+    [
+        "Offset of field: jsval_layout::asWord",
+    ][::std::mem::offset_of!(jsval_layout, asWord) - 0usize];
+    [
+        "Offset of field: jsval_layout::asUIntPtr",
+    ][::std::mem::offset_of!(jsval_layout, asUIntPtr) - 0usize];
+};
 impl Default for jsval_layout {
     fn default() -> Self {
         let mut s = ::std::mem::MaybeUninit::<Self>::uninit();
@@ -437,26 +462,12 @@ impl Default for jsval_layout {
 pub struct Value {
     pub data: jsval_layout,
 }
-#[test]
-fn bindgen_test_layout_Value() {
-    const UNINIT: ::std::mem::MaybeUninit<Value> = ::std::mem::MaybeUninit::uninit();
-    let ptr = UNINIT.as_ptr();
-    assert_eq!(
-        ::std::mem::size_of::<Value>(),
-        8usize,
-        concat!("Size of: ", stringify!(Value)),
-    );
-    assert_eq!(
-        ::std::mem::align_of::<Value>(),
-        8usize,
-        concat!("Alignment of ", stringify!(Value)),
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr).data) as usize - ptr as usize },
-        0usize,
-        concat!("Offset of field: ", stringify!(Value), "::", stringify!(data)),
-    );
-}
+#[allow(clippy::unnecessary_operation, clippy::identity_op)]
+const _: () = {
+    ["Size of Value"][::std::mem::size_of::<Value>() - 8usize];
+    ["Alignment of Value"][::std::mem::align_of::<Value>() - 8usize];
+    ["Offset of field: Value::data"][::std::mem::offset_of!(Value, data) - 0usize];
+};
 impl Default for Value {
     fn default() -> Self {
         let mut s = ::std::mem::MaybeUninit::<Self>::uninit();

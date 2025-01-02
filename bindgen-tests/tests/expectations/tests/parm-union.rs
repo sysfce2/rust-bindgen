@@ -4,20 +4,12 @@
 pub struct Struct {
     pub _address: u8,
 }
-#[test]
-fn bindgen_test_layout_Struct() {
-    assert_eq!(
-        ::std::mem::size_of::<Struct>(),
-        1usize,
-        concat!("Size of: ", stringify!(Struct)),
-    );
-    assert_eq!(
-        ::std::mem::align_of::<Struct>(),
-        1usize,
-        concat!("Alignment of ", stringify!(Struct)),
-    );
-}
-extern "C" {
+#[allow(clippy::unnecessary_operation, clippy::identity_op)]
+const _: () = {
+    ["Size of Struct"][::std::mem::size_of::<Struct>() - 1usize];
+    ["Alignment of Struct"][::std::mem::align_of::<Struct>() - 1usize];
+};
+unsafe extern "C" {
     #[link_name = "\u{1}_ZN6Struct8FunctionER5Union"]
     pub fn Struct_Function(this: *mut Struct, arg1: *mut Union);
 }
