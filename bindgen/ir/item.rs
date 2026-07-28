@@ -865,7 +865,7 @@ impl Item {
         }
 
         // Ancestors' ID iter
-        let mut ids_iter = target
+        let ids_iter = target
             .parent_id()
             .ancestors(ctx)
             .filter(|id| *id != ctx.root_module())
@@ -891,7 +891,7 @@ impl Item {
 
             // If target is anonymous we need find its first named ancestor.
             if target.is_anon() {
-                for id in ids_iter.by_ref() {
+                for id in ids_iter {
                     ids.push(id);
 
                     if !ctx.resolve_item(id).is_anon() {
